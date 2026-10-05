@@ -972,9 +972,15 @@ class DosLagosSite {
   }
 
   async reservationHistory() {
-    await this.page.goto(`${config.site.baseUrl}/reservation/history`, {waitUntil:'networkidle',timeout:30000});
+    await this.page.goto(`${config.site.baseUrl}/reservation/history`, {waitUntil:'domcontentloaded',timeout:30000});
     const container = this.page.getByTestId('reservations-page-container');
     await container.waitFor({state:'visible',timeout:15000});
+    await this.page.waitForFunction(() => {
+      const list = document.querySelector('[data-testid="reservations-page-container"]');
+      if (!list || list.querySelector('[role="progressbar"]')) return false;
+      return list.querySelectorAll('[role="group"]').length > 0 ||
+        /no (?:upcoming )?reservations|no (?:upcoming )?bookings/i.test(list.innerText);
+    }, null, {timeout:20000});
     const tab = this.page.getByTestId('reservations-tab-upcoming');
     if (await tab.getAttribute('aria-selected') !== 'true') throw new Error('Upcoming reservation history not selected');
     if (await container.getByRole('progressbar').count()) throw new Error('Reservation history is still loading');

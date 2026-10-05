@@ -175,3 +175,7 @@ test('pending cart preserves uncertain booking lock',async()=>{
  storage.save(f.file,{'2026-10-17':{status:'needs-review'}});
  try{await main([],{file:f.file,notifier,dates:['2026-10-17'],createSite:()=>({init:async()=>{},login:async()=>{},close:async()=>{},reservationHistory:async()=>[],hasPendingCart:async()=>true,searchDate:async()=>searched++,getAvailableTimes:async()=>[]})});assert.equal(searched,0);assert.equal(storage.load(f.file)['2026-10-17'].status,'needs-review');}finally{f.clean();}
 });
+test('unavailable history sends one alert and stops the scan before booking',async()=>{
+ const {main}=require('../src/doslagos/check');const f=fixture();let reads=0,alerts=0,bookings=0;
+ try{await assert.rejects(main([],{file:f.file,dates:['2026-10-17','2026-10-18'],notifier:{...notifier,error:async()=>alerts++},createSite:()=>({init:async()=>{},login:async()=>{},close:async()=>{},reservationHistory:async()=>{reads++;throw Error('History unavailable');},reserveAndReachCheckout:async()=>bookings++})}),/History unavailable/);assert.equal(reads,1);assert.equal(alerts,1);assert.equal(bookings,0);}finally{f.clean();}
+});
