@@ -1,6 +1,4 @@
 // Read-only diagnostic: never creates a cart or submits a purchase.
-const Site = require('./site');
-const config = require('./config');
 
 async function diagnostic(site) {
   let apiRequest;
@@ -10,8 +8,9 @@ async function diagnostic(site) {
         !url.pathname.includes('/profile')) apiRequest = request;
   });
   await site.login();
-  const reservations = await site.reservationHistory();
-  console.log(JSON.stringify({ headed: process.env.HEADLESS === 'false', reservations }));
+  await site.reservationHistory();
+  // Public workflow logs contain statuses only, never account reservation details.
+  console.log(JSON.stringify({ headed: process.env.HEADLESS === 'false', historyReadSucceeded: true }));
   if (!apiRequest) throw new Error('No authenticated booking-service request observed');
   const apiBase = await site.page.evaluate(() => {
     const element = [...document.querySelectorAll('*')]
@@ -53,6 +52,8 @@ async function diagnostic(site) {
 }
 
 if (require.main === module) {
+  const Site = require('./site');
+  const config = require('./config');
   (async () => {
     const site = new Site();
     try { await site.init(); await diagnostic(site); }
