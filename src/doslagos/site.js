@@ -922,8 +922,18 @@ class DosLagosSite {
       if (completePurchase) {
         await beforePurchase();
         await this.completePurchase();
-        await this.page.getByRole('heading', { name: 'Order Confirmed!', exact: true })
-          .waitFor({ state: 'visible', timeout: 30000 });
+        try {
+          await this.page.getByRole('heading', { name: 'Order Confirmed!', exact: true })
+            .waitFor({ state: 'visible', timeout: 30000 });
+        } catch {
+          // Capture field identifiers, never payment values or billing-page text.
+          const invalidFields = await this.page.locator('input[aria-invalid="true"], input:invalid')
+            .evaluateAll(inputs => inputs.filter(input => input.getClientRects().length)
+              .map(input => input.id || input.name || 'unnamed required input'));
+          throw new Error(invalidFields.length
+            ? `Purchase not confirmed; invalid fields: ${invalidFields.join(', ')}. Review reservation history.`
+            : 'Purchase not confirmed after 30 seconds; no visible invalid inputs. Review reservation history.');
+        }
         if (config.confirmationSelector) {
           const marker = this.page.locator(config.confirmationSelector).first();
           await marker.waitFor({ state: 'visible', timeout: 30000 });
