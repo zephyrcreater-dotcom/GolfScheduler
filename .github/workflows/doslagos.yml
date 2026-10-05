@@ -2,17 +2,8 @@ name: Scheduled browser checks
 on:
   workflow_dispatch:
   schedule:
-    # Sunday 9 p.m. through Monday 3 a.m. Pacific: every five minutes.
-    - cron: '*/5 21-23 * * 0'
-      timezone: America/Los_Angeles
-    - cron: '*/5 0-2 * * 1'
-      timezone: America/Los_Angeles
-    # All other hours: twice an hour, offset from the busy hour boundary.
-    - cron: '2,32 0-20 * * 0'
-      timezone: America/Los_Angeles
-    - cron: '2,32 3-23 * * 1'
-      timezone: America/Los_Angeles
-    - cron: '2,32 * * * 2-6'
+    # Check every five minutes, every day.
+    - cron: '*/5 * * * *'
       timezone: America/Los_Angeles
 permissions:
   contents: read
