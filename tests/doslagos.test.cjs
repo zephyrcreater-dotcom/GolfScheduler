@@ -154,7 +154,7 @@ test('cloud schedule runs once every five minutes throughout the week',()=>{
  });
  for(let day=0;day<7;day++)for(let hour=0;hour<24;hour++)for(let minute=0;minute<60;minute++){
   const hits=schedules.filter(s=>matches(s[0],minute)&&matches(s[1],hour)&&matches(s[4],day)).length;
-  assert.equal(hits,Number(minute%5===0),`${day} ${hour}:${minute}`);
+  assert.equal(hits,Number(minute%5===2),`${day} ${hour}:${minute}`);
  }
  assert.equal((source.match(/timezone: America\/Los_Angeles/g)||[]).length,1);
 });
