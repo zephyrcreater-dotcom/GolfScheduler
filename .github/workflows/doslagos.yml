@@ -53,13 +53,13 @@ jobs:
       DOSLAGOS_BILLING_POSTAL: ${{ secrets.DOSLAGOS_BILLING_POSTAL }}
       DOSLAGOS_BILLING_COUNTRY: ${{ secrets.DOSLAGOS_BILLING_COUNTRY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
         with:
           node-version: '24'
           cache: npm
       - run: npm ci --omit=dev
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: doslagos-playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
