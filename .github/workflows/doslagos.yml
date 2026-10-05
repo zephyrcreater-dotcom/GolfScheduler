@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      HEADLESS: 'true'
+      HEADLESS: 'false'
       DOSLAGOS_HORIZON_DAYS: '14'
       DOSLAGOS_TIMEZONE: America/Los_Angeles
       DOSLAGOS_PREFERRED_TIME: '06:35'
@@ -67,4 +67,4 @@ jobs:
           key: doslagos-playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
       - name: Scan once with durable booking locks
-        run: node src/doslagos/cloud.js
+        run: xvfb-run -a node src/doslagos/cloud.js

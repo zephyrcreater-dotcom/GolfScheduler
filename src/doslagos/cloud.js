@@ -1,6 +1,7 @@
 // Cloud jobs perform ONE scan. Scheduling is managed by GitHub Actions.
 require('dotenv').config();
-process.env.HEADLESS = 'true';
+// Respect the workflow's tested browser mode; other callers default to headless.
+process.env.HEADLESS = process.env.HEADLESS || 'true';
 delete process.env.DOSLAGOS_CHROMIUM_EXECUTABLE_PATH;
 const RedisState = require('./redis-state');
 (async()=>{
