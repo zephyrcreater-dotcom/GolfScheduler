@@ -67,6 +67,14 @@ async function checkDate(date, { file = STATE_PATH, settings = config,
     }
     await store.save(file, state);
     console.log(`${date}: ${state[date].status}${state[date].error ? ` — ${state[date].error}` : ''}`);
+    if (state[date].status === 'confirmed') {
+      await notifier.outcome({date, time:target.time, status:'confirmed'});
+    }
+    if (state[date].status === 'needs-review') {
+      const error = new Error(state[date].error);
+      error.blocked = Boolean(result.blocked);
+      throw error;
+    }
     if (result.blocked) {
       const error = new Error(result.error);
       error.blocked = true;
@@ -78,7 +86,10 @@ async function checkDate(date, { file = STATE_PATH, settings = config,
       state[date].error = error.message;
       await store.save(file, state);
     }
-    error.notified = true;
+    if (!error.notified) {
+      await notifier.error({reason:`${date}: ${error.message} Booking stopped; review reservation history before retrying.`});
+      error.notified = true;
+    }
     throw error;
   } finally {
     if (!sharedSite) await site.close();
@@ -138,6 +149,7 @@ async function main(args = process.argv.slice(2), overrides = {}) {
         catch (error) {
           console.error(`${target}: ${error.message}`);
           if (!error.notified) {
+            await notifier.error({reason:`${target}: ${error.message}`});
             error.notified = true;
           }
           if (error.blocked || error.fatalStartup || !sessionReady) throw error;

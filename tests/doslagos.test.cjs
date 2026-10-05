@@ -44,15 +44,15 @@ test('capacity filtering and Los Angeles date boundary',()=>{
 });
 function fixture(){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'doslagos-test-'));return {file:path.join(dir,'state.json'),clean:()=>fs.rmSync(dir,{recursive:true,force:true})};}
 test('uncertain purchase locks date across restarts; callback persists before click',async()=>{
- const f=fixture();let calls=0;
+ const f=fixture();let calls=0;let failures=0;
  const createSite=()=>({init:async()=>{},login:async()=>{},searchDate:async()=>{},getAvailableTimes:async()=>times(['06:30','06:40']),close:async()=>{},reserveAndReachCheckout:async(index,golfers,options)=>{
   calls++;assert.equal(storage.load(f.file)['2026-10-10'].status,'attempting');
   await options.beforePurchase();assert.equal(storage.load(f.file)['2026-10-10'].status,'purchase-attempted');
   return {reached:true,purchaseClicked:true};
  }});
- try{const args={file:f.file,settings,notifier,createSite,fillPayment:true,completePurchase:true};
- await checkDate('2026-10-10',args);assert.equal(storage.load(f.file)['2026-10-10'].status,'needs-review');
- await checkDate('2026-10-10',args);assert.equal(calls,1);
+ try{const args={file:f.file,settings,notifier:{...notifier,error:async()=>{failures++;}},createSite,fillPayment:true,completePurchase:true};
+ await assert.rejects(checkDate('2026-10-10',args), /confirmation not verified/);assert.equal(storage.load(f.file)['2026-10-10'].status,'needs-review');
+ await checkDate('2026-10-10',args);assert.equal(calls,1);assert.equal(failures,1);
  }finally{f.clean();}
 });
 test('confirmed date skipped; second date independent; crash remains blocked',async()=>{
