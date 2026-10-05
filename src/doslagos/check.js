@@ -128,11 +128,13 @@ async function main(args = process.argv.slice(2), overrides = {}) {
   try {
     do {
       const dates = date ? [date] : (overrides.dates || candidateDates(config));
+      let historyChecked = false;
+      let pendingCart = false;
       for (const target of dates) {
         if (controller.signal.aborted) break;
         try {
-          const current = await store.load(file);
-          if (current[target] && storage.LOCKED.has(current[target].status)) {
+          let current = await store.load(file);
+          if (current[target] && ['confirmed','held'].includes(current[target].status)) {
             console.log(`${target}: ${current[target].status}; skipping.`);
             continue;
           }
@@ -142,7 +144,34 @@ async function main(args = process.argv.slice(2), overrides = {}) {
             await sharedSite.login();
             sessionReady = true;
           }
-          const allowBooking = overrides.allowBooking !== false && !Object.values(current).some(entry =>
+          if (!historyChecked && sharedSite.reservationHistory) {
+            const reservations = await sharedSite.reservationHistory();
+            pendingCart = await sharedSite.hasPendingCart();
+            for (const reservation of reservations) {
+              const previous = current[reservation.date];
+              current[reservation.date] = {...previous, ...reservation, status:'confirmed',
+                confirmation:previous?.confirmation || 'verified-in-reservation-history'};
+              if (previous && ['attempting','purchase-attempted','needs-review'].includes(previous.status)) {
+                await notifier.outcome({...reservation,status:'confirmed'});
+              }
+            }
+            if (!pendingCart) {
+              for (const entry of Object.values(current)) {
+                if (['attempting','purchase-attempted','needs-review'].includes(entry.status)) {
+                  entry.status = 'none';
+                  entry.historyVerifiedAbsentAt = new Date().toISOString();
+                  delete entry.error;
+                }
+              }
+            }
+            await store.save(file,current);
+            historyChecked = true;
+          }
+          if (current[target] && storage.LOCKED.has(current[target].status)) {
+            console.log(`${target}: ${current[target].status}; skipping after history verification.`);
+            continue;
+          }
+          const allowBooking = !pendingCart && overrides.allowBooking !== false && !Object.values(current).some(entry =>
             ['held','attempting','purchase-attempted','needs-review'].includes(entry.status));
           await checkDate(target, { ...overrides, file, fillPayment, completePurchase, sharedSite, allowBooking });
         }
