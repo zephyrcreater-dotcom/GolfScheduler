@@ -179,3 +179,11 @@ test('unavailable history sends one alert and stops the scan before booking',asy
  const {main}=require('../src/doslagos/check');const f=fixture();let reads=0,alerts=0,bookings=0;
  try{await assert.rejects(main([],{file:f.file,dates:['2026-10-17','2026-10-18'],notifier:{...notifier,error:async()=>alerts++},createSite:()=>({init:async()=>{},login:async()=>{},close:async()=>{},reservationHistory:async()=>{reads++;throw Error('History unavailable');},reserveAndReachCheckout:async()=>bookings++})}),/History unavailable/);assert.equal(reads,1);assert.equal(alerts,1);assert.equal(bookings,0);}finally{f.clean();}
 });
+test('checkout probe disables payment/purchase, preserves confirmed booking, and notifies each checkout',async()=>{
+ const {checkoutProbe}=require('../src/doslagos/checkout-probe');let state={'2026-10-16':{status:'confirmed',confirmation:'#existing'}};let alerts=0,options;
+ const store={acquire:async()=>async()=>{},load:async()=>structuredClone(state),save:async(_,s)=>{state=s;}};
+ const site={init:async()=>{},login:async()=>{},close:async()=>{},reservationHistory:async()=>[],hasPendingCart:async()=>false,searchDate:async()=>{},getAvailableTimes:async()=>[{index:0,time:'06:35'}],reserveAndReachCheckout:async(i,g,o)=>{options=o;return {reached:true};},assertTestCheckout:async()=>{}};
+ await checkoutProbe(store,{createSite:()=>site,notifier:{push:async()=>{alerts++;return true;},error:async()=>{}}});
+ assert.equal(options.completePurchase,false);assert.equal(options.fillPayment,false);assert.equal(state['2026-10-16'].confirmation,'#existing');assert.equal(alerts,1);
+ site.hasPendingCart=async()=>true;site.resumeTestCheckout=async()=>({reached:true});site.reserveAndReachCheckout=async()=>{throw Error('Must reuse cart');};await checkoutProbe(store,{createSite:()=>site,notifier:{push:async()=>{alerts++;return true;},error:async()=>{}}});assert.equal(alerts,2);
+});

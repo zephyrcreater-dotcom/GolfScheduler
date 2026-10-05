@@ -5,6 +5,11 @@ delete process.env.DOSLAGOS_CHROMIUM_EXECUTABLE_PATH;
 const RedisState = require('./redis-state');
 (async()=>{
   const store = new RedisState();
+  if (process.env.DOSLAGOS_MODE === 'checkout-test') {
+    console.log('CHECKOUT TEST: payment input OFF; purchase click OFF');
+    await require('./checkout-probe').checkoutProbe(store,{date:process.env.DOSLAGOS_TEST_DATE || '2026-10-16'});
+    return;
+  }
   if (process.argv.includes('--seed-local-state')) {
     const storage = require('./state');
     const path = require('node:path');

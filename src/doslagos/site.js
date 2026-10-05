@@ -1009,6 +1009,18 @@ class DosLagosSite {
     // A successful click does not prove that payment or booking succeeded.
     // Keep the browser open so the resulting confirmation/error can be reviewed.
   }
+
+  async resumeTestCheckout() {
+    await this.page.getByTestId('core-shopping-cart').locator('.MuiBadge-root').first().click();
+    await this.page.getByRole('button', {name:/^checkout$/i}).click();
+    await this.assertTestCheckout();
+    return {reached:true};
+  }
+
+  async assertTestCheckout() {
+    await this.page.locator('#cvv-input').waitFor({state:'visible',timeout:20000});
+    await this.page.getByTestId('make-your-reservation-btn').waitFor({state:'visible',timeout:20000});
+  }
 }
 
 module.exports = DosLagosSite;
