@@ -158,3 +158,20 @@ test('cloud schedule runs once every five minutes throughout the week',()=>{
  }
  assert.equal((source.match(/timezone: America\/Los_Angeles/g)||[]).length,1);
 });
+test('history cards parse booking dates and reject unknown formats',()=>{
+ const {parseHistoryCards}=require('../src/doslagos/history');
+ assert.deepEqual(parseHistoryCards(['Dos Lagos Golf Course\nSaturday, October 10, 2026\n8:57 AM\n18 Holes\n1 Golfer\nView Details']),[{date:'2026-10-10',time:'08:57',golfers:1}]);
+ assert.throws(()=>parseHistoryCards(['Loading reservations']),/Unrecognized/);
+});
+test('history reconciles uncertain bookings and existing dates before new attempts',async()=>{
+ const {main}=require('../src/doslagos/check');const f=fixture();let searched=[];
+ storage.save(f.file,{'2026-10-17':{status:'needs-review'},'2026-10-10':{status:'none'}});
+ try{await main([],{file:f.file,notifier,dates:['2026-10-17','2026-10-10'],createSite:()=>({init:async()=>{},login:async()=>{},close:async()=>{},reservationHistory:async()=>[{date:'2026-10-10',time:'08:57',golfers:1}],hasPendingCart:async()=>false,searchDate:async d=>searched.push(d),getAvailableTimes:async()=>[]})});
+ assert.deepEqual(searched,['2026-10-17']);assert.equal(storage.load(f.file)['2026-10-10'].status,'confirmed');assert.equal(storage.load(f.file)['2026-10-17'].status,'none');assert.ok(storage.load(f.file)['2026-10-17'].historyVerifiedAbsentAt);
+ }finally{f.clean();}
+});
+test('pending cart preserves uncertain booking lock',async()=>{
+ const {main}=require('../src/doslagos/check');const f=fixture();let searched=0;
+ storage.save(f.file,{'2026-10-17':{status:'needs-review'}});
+ try{await main([],{file:f.file,notifier,dates:['2026-10-17'],createSite:()=>({init:async()=>{},login:async()=>{},close:async()=>{},reservationHistory:async()=>[],hasPendingCart:async()=>true,searchDate:async()=>searched++,getAvailableTimes:async()=>[]})});assert.equal(searched,0);assert.equal(storage.load(f.file)['2026-10-17'].status,'needs-review');}finally{f.clean();}
+});

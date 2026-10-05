@@ -4,6 +4,7 @@ const fs = require('fs');
 const config = require('./config');
 const { browserStartupError } = require('./browser-error');
 const { verifyConfirmation } = require('./confirmation');
+const { parseHistoryCards } = require('./history');
 
 let _screenshotDirEnsured = false;
 
@@ -968,6 +969,29 @@ class DosLagosSite {
         blocked: Boolean(err.blocked),
       };
     }
+  }
+
+  async reservationHistory() {
+    await this.page.goto(`${config.site.baseUrl}/reservation/history`, {waitUntil:'networkidle',timeout:30000});
+    const container = this.page.getByTestId('reservations-page-container');
+    await container.waitFor({state:'visible',timeout:15000});
+    const tab = this.page.getByTestId('reservations-tab-upcoming');
+    if (await tab.getAttribute('aria-selected') !== 'true') throw new Error('Upcoming reservation history not selected');
+    if (await container.getByRole('progressbar').count()) throw new Error('Reservation history is still loading');
+    if (await container.getByRole('button', {name:/next|load more/i}).count()) throw new Error('Paginated reservation history needs review');
+    const cards = await container.getByRole('group').allInnerTexts();
+    if (!cards.length && !/no (?:upcoming )?reservations|no (?:upcoming )?bookings/i.test(await container.innerText())) {
+      throw new Error('Reservation history did not provide a complete list');
+    }
+    return parseHistoryCards(cards);
+  }
+
+  async hasPendingCart() {
+    const cart = this.page.getByTestId('core-shopping-cart');
+    await cart.waitFor({state:'attached',timeout:10000});
+    // The loaded history page renders an empty hidden container for no cart.
+    // Any rendered cart contents are treated conservatively as a pending hold.
+    return await cart.evaluate(element => element.childElementCount > 0 || element.textContent.trim().length > 0);
   }
 
   async completePurchase() {
