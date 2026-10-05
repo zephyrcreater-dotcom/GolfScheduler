@@ -5,6 +5,7 @@ const config = require('./config');
 const { browserStartupError } = require('./browser-error');
 const { verifyConfirmation } = require('./confirmation');
 const { parseHistoryCards } = require('./history');
+const { checkoutTrace } = require('./checkout-trace');
 
 let _screenshotDirEnsured = false;
 
@@ -922,8 +923,9 @@ class DosLagosSite {
       let confirmationDetails = null;
       if (completePurchase) {
         await beforePurchase();
-        await this.completePurchase();
+        const trace = checkoutTrace(this.page);
         try {
+          await this.completePurchase();
           await this.page.getByRole('heading', { name: 'Order Confirmed!', exact: true })
             .waitFor({ state: 'visible', timeout: 30000 });
         } catch {
@@ -931,9 +933,12 @@ class DosLagosSite {
           const invalidFields = await this.page.locator('input[aria-invalid="true"], input:invalid')
             .evaluateAll(inputs => inputs.filter(input => input.getClientRects().length)
               .map(input => input.id || input.name || 'unnamed required input'));
-          throw new Error(invalidFields.length
+          const reason = invalidFields.length
             ? `Purchase not confirmed; invalid fields: ${invalidFields.join(', ')}. Review reservation history.`
-            : 'Purchase not confirmed after 30 seconds; no visible invalid inputs. Review reservation history.');
+            : 'Purchase not confirmed after 30 seconds; no visible invalid inputs. Review reservation history.';
+          throw new Error(`${reason} Network trace: ${trace.summary()}`);
+        } finally {
+          trace.stop();
         }
         if (config.confirmationSelector) {
           const marker = this.page.locator(config.confirmationSelector).first();
