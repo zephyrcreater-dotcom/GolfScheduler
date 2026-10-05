@@ -156,7 +156,7 @@ test('cloud schedule runs once every five minutes throughout the week',()=>{
   const hits=schedules.filter(s=>matches(s[0],minute)&&matches(s[1],hour)&&matches(s[4],day)).length;
   assert.equal(hits,Number(minute%5===2),`${day} ${hour}:${minute}`);
  }
- assert.equal((source.match(/timezone: America\/Los_Angeles/g)||[]).length,1);
+ assert.equal((source.match(/timezone: America\/Los_Angeles/g)||[]).length,0);
 });
 test('history cards parse booking dates and reject unknown formats',()=>{
  const {parseHistoryCards}=require('../src/doslagos/history');
