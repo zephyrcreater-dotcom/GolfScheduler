@@ -4,7 +4,6 @@ on:
   schedule:
     # Check every five minutes, every day.
     - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
-      timezone: America/Los_Angeles
 permissions:
   contents: read
 concurrency:

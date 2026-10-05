@@ -156,7 +156,7 @@ test('cloud schedule runs once every five minutes throughout the week',()=>{
   const hits=schedules.filter(s=>matches(s[0],minute)&&matches(s[1],hour)&&matches(s[4],day)).length;
   assert.equal(hits,Number(minute%5===2),`${day} ${hour}:${minute}`);
  }
- assert.equal((source.match(/timezone: America\/Los_Angeles/g)||[]).length,1);
+ assert.equal((source.match(/timezone: America\/Los_Angeles/g)||[]).length,0);
 });
 test('history cards parse booking dates and reject unknown formats',()=>{
  const {parseHistoryCards}=require('../src/doslagos/history');
@@ -174,4 +174,8 @@ test('pending cart preserves uncertain booking lock',async()=>{
  const {main}=require('../src/doslagos/check');const f=fixture();let searched=0;
  storage.save(f.file,{'2026-10-17':{status:'needs-review'}});
  try{await main([],{file:f.file,notifier,dates:['2026-10-17'],createSite:()=>({init:async()=>{},login:async()=>{},close:async()=>{},reservationHistory:async()=>[],hasPendingCart:async()=>true,searchDate:async()=>searched++,getAvailableTimes:async()=>[]})});assert.equal(searched,0);assert.equal(storage.load(f.file)['2026-10-17'].status,'needs-review');}finally{f.clean();}
+});
+test('unavailable history sends one alert and stops the scan before booking',async()=>{
+ const {main}=require('../src/doslagos/check');const f=fixture();let reads=0,alerts=0,bookings=0;
+ try{await assert.rejects(main([],{file:f.file,dates:['2026-10-17','2026-10-18'],notifier:{...notifier,error:async()=>alerts++},createSite:()=>({init:async()=>{},login:async()=>{},close:async()=>{},reservationHistory:async()=>{reads++;throw Error('History unavailable');},reserveAndReachCheckout:async()=>bookings++})}),/History unavailable/);assert.equal(reads,1);assert.equal(alerts,1);assert.equal(bookings,0);}finally{f.clean();}
 });

@@ -145,8 +145,14 @@ async function main(args = process.argv.slice(2), overrides = {}) {
             sessionReady = true;
           }
           if (!historyChecked && sharedSite.reservationHistory) {
-            const reservations = await sharedSite.reservationHistory();
-            pendingCart = await sharedSite.hasPendingCart();
+            let reservations;
+            try {
+              reservations = await sharedSite.reservationHistory();
+              pendingCart = await sharedSite.hasPendingCart();
+            } catch (error) {
+              error.historyUnavailable = true;
+              throw error;
+            }
             for (const reservation of reservations) {
               const previous = current[reservation.date];
               current[reservation.date] = {...previous, ...reservation, status:'confirmed',
@@ -181,7 +187,7 @@ async function main(args = process.argv.slice(2), overrides = {}) {
             await notifier.error({reason:`${target}: ${error.message}`});
             error.notified = true;
           }
-          if (error.blocked || error.fatalStartup || !sessionReady) throw error;
+          if (error.blocked || error.fatalStartup || error.historyUnavailable || !sessionReady) throw error;
           if (!watch) process.exitCode = 1;
         }
       }
