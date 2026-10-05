@@ -1,0 +1,68 @@
+name: Dos Lagos checker
+on:
+  workflow_dispatch:
+  schedule:
+    # Sunday 9 p.m. through Monday 3 a.m. Pacific: every five minutes.
+    - cron: '*/5 21-23 * * 0'
+      timezone: America/Los_Angeles
+    - cron: '*/5 0-2 * * 1'
+      timezone: America/Los_Angeles
+    # All other hours: twice an hour, offset from the busy hour boundary.
+    - cron: '2,32 0-20 * * 0'
+      timezone: America/Los_Angeles
+    - cron: '2,32 3-23 * * 1'
+      timezone: America/Los_Angeles
+    - cron: '2,32 * * * 2-6'
+      timezone: America/Los_Angeles
+permissions:
+  contents: read
+concurrency:
+  group: doslagos-cloud-checker
+  cancel-in-progress: false
+jobs:
+  check:
+    # OFF until durable state is seeded, secrets set, and the local watcher stopped.
+    if: vars.DOSLAGOS_CLOUD_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      HEADLESS: 'true'
+      DOSLAGOS_HORIZON_DAYS: '14'
+      DOSLAGOS_TIMEZONE: America/Los_Angeles
+      DOSLAGOS_PREFERRED_TIME: '06:35'
+      DOSLAGOS_WINDOW_START: '06:00'
+      DOSLAGOS_WINDOW_END: '07:00'
+      DOSLAGOS_SATURDAY_CUTOFF: '09:00'
+      DOSLAGOS_SUNDAY_CUTOFF: '07:30'
+      DOSLAGOS_TARGET_DAYS: '6,0'
+      DOSLAGOS_GOLFERS: '1'
+      DOSLAGOS_STATE_PREFIX: doslagos:test
+      DOSLAGOS_COMPLETE_PURCHASE: ${{ vars.DOSLAGOS_COMPLETE_PURCHASE }}
+      DOSLAGOS_CONFIRMATION_SELECTOR: ${{ vars.DOSLAGOS_CONFIRMATION_SELECTOR }}
+      GOLF_EMAIL: ${{ secrets.GOLF_EMAIL }}
+      GOLF_PASSWORD: ${{ secrets.GOLF_PASSWORD }}
+      NTFY_SERVER: ${{ vars.NTFY_SERVER || 'https://ntfy.sh' }}
+      NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      DOSLAGOS_CARD_NUMBER: ${{ secrets.DOSLAGOS_CARD_NUMBER }}
+      DOSLAGOS_CARD_EXP_MONTH: ${{ secrets.DOSLAGOS_CARD_EXP_MONTH }}
+      DOSLAGOS_CARD_EXP_YEAR: ${{ secrets.DOSLAGOS_CARD_EXP_YEAR }}
+      DOSLAGOS_CARD_CVV: ${{ secrets.DOSLAGOS_CARD_CVV }}
+      DOSLAGOS_BILLING_ADDRESS: ${{ secrets.DOSLAGOS_BILLING_ADDRESS }}
+      DOSLAGOS_BILLING_POSTAL: ${{ secrets.DOSLAGOS_BILLING_POSTAL }}
+      DOSLAGOS_BILLING_COUNTRY: ${{ secrets.DOSLAGOS_BILLING_COUNTRY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --omit=dev
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: doslagos-playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      - name: Scan once with durable booking locks
+        run: node src/doslagos/cloud.js
