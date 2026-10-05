@@ -11,6 +11,15 @@ on:
           - manual
           - qstash
         default: manual
+      purchase_test_date:
+        description: 'Manual purchase test date (YYYY-MM-DD); leave blank for normal scans'
+        required: false
+        type: string
+      approve_purchase_test:
+        description: 'Authorize ONE real purchase attempt for the test date'
+        required: false
+        type: boolean
+        default: false
   schedule:
     # Check every five minutes, every day.
     - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
@@ -67,4 +76,13 @@ jobs:
           key: doslagos-playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
       - name: Scan once with durable booking locks
-        run: xvfb-run -a node src/doslagos/cloud.js
+        env:
+          PURCHASE_TEST_DATE: ${{ inputs.purchase_test_date }}
+          APPROVE_PURCHASE_TEST: ${{ inputs.approve_purchase_test }}
+        run: |
+          if [ "$APPROVE_PURCHASE_TEST" = "true" ]; then
+            test -n "$PURCHASE_TEST_DATE" || { echo 'A purchase test requires an explicit date'; exit 1; }
+            xvfb-run -a node src/doslagos/cloud.js "--purchase-test-date=$PURCHASE_TEST_DATE"
+          else
+            xvfb-run -a node src/doslagos/cloud.js
+          fi

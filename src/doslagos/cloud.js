@@ -23,8 +23,12 @@ const RedisState = require('./redis-state');
     finally { await release(); }
     return;
   }
-  const args = process.env.DOSLAGOS_COMPLETE_PURCHASE === 'true'
+  // Explicit manual test runs once; it does not enable scheduled purchases.
+  const purchaseTest = process.argv.find(arg => arg.startsWith('--purchase-test-date='));
+  const completePurchase = Boolean(purchaseTest) || process.env.DOSLAGOS_COMPLETE_PURCHASE === 'true';
+  const args = completePurchase
     ? ['--fill-test-payment','--complete-test-purchase'] : [];
-  if (process.env.DOSLAGOS_DATE) args.push(`--date=${process.env.DOSLAGOS_DATE}`);
-  await require('./check').main(args,{store,allowBooking:process.env.DOSLAGOS_COMPLETE_PURCHASE === 'true'});
+  if (purchaseTest) args.push(`--date=${purchaseTest.slice('--purchase-test-date='.length)}`);
+  else if (process.env.DOSLAGOS_DATE) args.push(`--date=${process.env.DOSLAGOS_DATE}`);
+  await require('./check').main(args,{store,allowBooking:completePurchase});
 })().catch(error=>{console.error(error.message);process.exitCode=1;});
