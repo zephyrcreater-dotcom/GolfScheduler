@@ -10,6 +10,17 @@ process.env.DOSLAGOS_CARD_CVV = 'OFFLINE-CVV-SECRET';
 const { selectTeeTime, candidateDates } = require('../src/doslagos/selection');
 const storage = require('../src/doslagos/state');
 const { checkDate } = require('../src/doslagos/check');
+const { verifyConfirmation } = require('../src/doslagos/confirmation');
+test('confirmation requires a reservation number and exactly matching booking details', () => {
+ const text = 'Order Confirmed! Billing Details Order Details Dos Lagos Golf Course October 16, 2026 6:51 AM 1 Player, 18 holes, Cart Included Order Summary';
+ const expected = { date:'2026-10-16', time:'06:51' };
+ assert.deepEqual(verifyConfirmation(text, '#123456', expected, 1), { reference:'#123456', ...expected, golfers:1 });
+ for (const slot of [{...expected,date:'2026-10-17'}, {...expected,time:'06:35'}]) assert.throws(() => verifyConfirmation(text,'#123456',slot,1), /differs/);
+ assert.throws(() => verifyConfirmation(text,'#123456',expected,2), /differs/);
+ assert.throws(() => verifyConfirmation(text,'',expected,1), /reservation number/);
+ assert.throws(() => verifyConfirmation(text + ' October 17, 2026 6:51 AM 1 Player', '#123456',expected,1), /Ambiguous/);
+ assert.throws(() => verifyConfirmation('Order Confirmed!', '#123456',expected,1), /details/);
+});
 const notifier = Object.fromEntries(['searchResults','found','outcome','lifecycle','error'].map(name=>[name,async()=>{}]));
 const settings = {windowStart:'06:00',windowEnd:'07:00',preferredTime:'06:35',saturdayCutoff:'09:00',sundayCutoff:'07:30',golfers:1,timezone:'America/Los_Angeles',horizonDays:12,targetDays:[6,0]};
 const times = values => values.map((time,index)=>({time,index,price:'10'}));

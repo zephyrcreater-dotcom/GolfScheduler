@@ -49,7 +49,7 @@ async function checkDate(date, { file = STATE_PATH, settings = config,
     await store.save(file, state);
     await notifier.found({date, time:target.time, golfers:settings.golfers, price:target.price});
     const result = await site.reserveAndReachCheckout(target.index, settings.golfers, {
-      fillPayment, completePurchase, expectedSlot: target,
+      fillPayment, completePurchase, expectedSlot: { ...target, date },
       beforePurchase: async () => {
         state[date].status = 'purchase-attempted';
         await store.save(file, state);
@@ -58,6 +58,7 @@ async function checkDate(date, { file = STATE_PATH, settings = config,
     if (result.confirmation) {
       state[date].status = 'confirmed';
       state[date].confirmation = result.confirmation;
+      if (result.confirmationDetails) state[date].confirmationDetails = result.confirmationDetails;
     } else if (result.reached && !completePurchase) {
       state[date].status = 'held';
     } else {

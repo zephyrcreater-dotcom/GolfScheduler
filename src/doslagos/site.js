@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const config = require('./config');
 const { browserStartupError } = require('./browser-error');
+const { verifyConfirmation } = require('./confirmation');
 
 let _screenshotDirEnsured = false;
 
@@ -917,15 +918,21 @@ class DosLagosSite {
       // OFF by default. Enable separately from fillPayment to click the
       // final button after payment fields and the required checkbox are ready.
       let confirmation = null;
+      let confirmationDetails = null;
       if (completePurchase) {
         await beforePurchase();
         await this.completePurchase();
+        await this.page.getByRole('heading', { name: 'Order Confirmed!', exact: true })
+          .waitFor({ state: 'visible', timeout: 30000 });
         if (config.confirmationSelector) {
           const marker = this.page.locator(config.confirmationSelector).first();
           await marker.waitFor({ state: 'visible', timeout: 30000 });
-          confirmation = (await marker.innerText()).trim();
-          if (!confirmation) throw new Error('Confirmation marker was empty; review reservation history');
         }
+        const reservation = this.page.getByTestId('teetime-item-component-0-gncReservationId');
+        await reservation.waitFor({ state: 'visible', timeout: 30000 });
+        confirmationDetails = verifyConfirmation(await this.page.locator('body').innerText(),
+          await reservation.innerText(), expectedSlot, golferCount);
+        confirmation = confirmationDetails.reference;
       }
       return {
         reached: true,
@@ -935,6 +942,7 @@ class DosLagosSite {
         paymentFields,
         purchaseClicked: completePurchase,
         confirmation,
+        confirmationDetails,
       };
 
     } catch (err) {
