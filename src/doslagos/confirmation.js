@@ -4,7 +4,8 @@ function verifyConfirmation(text, reference, expected, golfers) {
   if (!/^#[A-Za-z0-9-]+$/.test(reference.trim())) throw new Error('Missing reservation number; review reservation history');
   if (!/Order Details/.test(text) || !/Dos Lagos Golf Course/.test(text)) throw new Error('Missing confirmed order details; review reservation history');
   const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const dates = [...text.matchAll(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})\s+(\d{1,2}):(\d{2})\s*(AM|PM)/gi)];
+  // The current booking UI formats dates as "MMMM D. YYYY h:mm A".
+  const dates = [...text.matchAll(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})[.,]?\s+(\d{4})\s+(\d{1,2}):(\d{2})\s*(AM|PM)/gi)];
   const players = [...text.matchAll(/\b(\d+)\s+Players?\b/gi)];
   if (dates.length !== 1 || players.length !== 1) throw new Error('Ambiguous confirmed order; review reservation history');
   const [,month,day,year,hour,minute,period] = dates[0];
