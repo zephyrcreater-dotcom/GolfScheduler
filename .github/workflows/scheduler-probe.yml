@@ -1,0 +1,17 @@
+name: Scheduler diagnostic
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '3,8,13,18,23,28,33,38,43,48,53,58 * * * *'
+permissions: {}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Record event delivery
+        env:
+          TRIGGER: ${{ github.event_name }}
+        run: |
+          echo "Trigger: $TRIGGER"
+          date -u
