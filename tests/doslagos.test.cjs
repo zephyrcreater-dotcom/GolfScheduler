@@ -22,6 +22,14 @@ test('confirmation requires a reservation number and exactly matching booking de
  assert.throws(() => verifyConfirmation('Order Confirmed!', '#123456',expected,1), /details/);
 });
 const notifier = Object.fromEntries(['searchResults','found','outcome','lifecycle','error'].map(name=>[name,async()=>{}]));
+test('confirmation accepts the current period-separated date without weakening duplicate checks', () => {
+ const text = 'Order Confirmed! Order Details Dos Lagos Golf Course October 16. 2026 6:51 AM 1 Player, 18 holes, Cart Included';
+ const expected = {date:'2026-10-16',time:'06:51'};
+ assert.deepEqual(verifyConfirmation(text,'#123456',expected,1),{reference:'#123456',...expected,golfers:1});
+ assert.throws(()=>verifyConfirmation(text,'#123456',{...expected,date:'2026-10-17'},1),/differs/);
+ assert.throws(()=>verifyConfirmation(text,'#123456',expected,2),/differs/);
+ assert.throws(()=>verifyConfirmation(text+' October 17. 2026 6:51 AM 1 Player','#123456',expected,1),/Ambiguous/);
+});
 const settings = {windowStart:'06:00',windowEnd:'07:00',preferredTime:'06:35',saturdayCutoff:'09:00',sundayCutoff:'07:30',golfers:1,timezone:'America/Los_Angeles',horizonDays:12,targetDays:[6,0]};
 const times = values => values.map((time,index)=>({time,index,price:'10'}));
 test('closest to 06:35 wins, earlier wins ties, regardless of listing order',()=>{
