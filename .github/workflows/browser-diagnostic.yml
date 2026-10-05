@@ -1,0 +1,26 @@
+name: Read-only headed browser diagnostic
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: doslagos-cloud-checker
+  cancel-in-progress: false
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      HEADLESS: 'false'
+      GOLF_EMAIL: ${{ secrets.GOLF_EMAIL }}
+      GOLF_PASSWORD: ${{ secrets.GOLF_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --omit=dev
+      - run: npx playwright install --with-deps chromium
+      - name: Check login, history and booking-token GET in headed Chromium
+        run: xvfb-run -a node src/doslagos/browser-diagnostic.js
