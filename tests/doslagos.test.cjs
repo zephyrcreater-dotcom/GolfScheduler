@@ -143,7 +143,7 @@ test('remote state requires initialization and lock ownership for every write',a
  await release();assert.equal(values.get(store2.lockKey),'different-owner');
  }finally{await release();}
 });
-test('cloud schedule covers Sunday night without duplicate half-hour triggers',()=>{
+test('cloud schedule runs once every five minutes throughout the week',()=>{
  const source=fs.readFileSync(path.join(__dirname,'../.github/workflows/doslagos.yml'),'utf8');
  const schedules=[...source.matchAll(/cron: '([^']+)'/g)].map(match=>match[1].split(' '));
  const matches=(field,value)=>field.split(',').some(piece=>{
@@ -154,8 +154,7 @@ test('cloud schedule covers Sunday night without duplicate half-hour triggers',(
  });
  for(let day=0;day<7;day++)for(let hour=0;hour<24;hour++)for(let minute=0;minute<60;minute++){
   const hits=schedules.filter(s=>matches(s[0],minute)&&matches(s[1],hour)&&matches(s[4],day)).length;
-  const fast=(day===0&&hour>=21)||(day===1&&hour<3);
-  assert.equal(hits,Number(fast?minute%5===0:(minute===2||minute===32)),`${day} ${hour}:${minute}`);
+  assert.equal(hits,Number(minute%5===0),`${day} ${hour}:${minute}`);
  }
- assert.equal((source.match(/timezone: America\/Los_Angeles/g)||[]).length,5);
+ assert.equal((source.match(/timezone: America\/Los_Angeles/g)||[]).length,1);
 });
