@@ -1,6 +1,4 @@
 // Read-only diagnostic: never creates a cart or submits a purchase.
-const Site = require('./site');
-const config = require('./config');
 
 async function diagnostic(site) {
   let apiRequest;
@@ -54,6 +52,8 @@ async function diagnostic(site) {
 }
 
 if (require.main === module) {
+  const Site = require('./site');
+  const config = require('./config');
   (async () => {
     const site = new Site();
     try { await site.init(); await diagnostic(site); }
