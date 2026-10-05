@@ -24,5 +24,6 @@ const RedisState = require('./redis-state');
   }
   const args = process.env.DOSLAGOS_COMPLETE_PURCHASE === 'true'
     ? ['--fill-test-payment','--complete-test-purchase'] : [];
+  if (process.env.DOSLAGOS_DATE) args.push(`--date=${process.env.DOSLAGOS_DATE}`);
   await require('./check').main(args,{store,allowBooking:process.env.DOSLAGOS_COMPLETE_PURCHASE === 'true'});
 })().catch(error=>{console.error(error.message);process.exitCode=1;});
