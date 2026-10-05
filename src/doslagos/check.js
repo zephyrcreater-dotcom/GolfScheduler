@@ -53,6 +53,11 @@ async function checkDate(date, { file = STATE_PATH, settings = config,
       beforePurchase: async () => {
         state[date].status = 'purchase-attempted';
         await store.save(file, state);
+        console.log(`${date} ${target.time}: checkout reached; proceeding to final purchase click.`);
+        if (process.env.DOSLAGOS_NOTIFY_CHECKOUT === 'true') {
+          await notifier.push({title:'About to book — checkout reached',
+            message:`${date} at ${target.time}: checkout and payment input completed. About to click purchase; confirmation will be verified.`,tags:'golf'});
+        }
       },
     });
     if (result.confirmation) {
