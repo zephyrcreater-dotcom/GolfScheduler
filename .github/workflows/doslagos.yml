@@ -1,6 +1,16 @@
 name: Scheduled browser checks
+run-name: ${{ github.event.inputs.timer_source == 'qstash' && 'Scheduled browser checks — external timer' || 'Scheduled browser checks' }}
 on:
   workflow_dispatch:
+    inputs:
+      timer_source:
+        description: Source of the check request
+        required: false
+        type: choice
+        options:
+          - manual
+          - qstash
+        default: manual
   schedule:
     # Check every five minutes, every day.
     - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
