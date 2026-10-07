@@ -11,7 +11,9 @@ function selectTeeTime(times, date, config) {
   const preferred = minutes(config.preferredTime);
   const available = times.filter(slot => !slot.maxGolfers || slot.maxGolfers >= config.golfers);
   const primary = available.filter(slot => minutes(slot.time) >= start && minutes(slot.time) <= end);
-  primary.sort((a, b) => Math.abs(minutes(a.time) - preferred) - Math.abs(minutes(b.time) - preferred)
+  primary.sort((a, b) => (day === 0
+    ? minutes(a.time) - minutes(b.time)
+    : Math.abs(minutes(a.time) - preferred) - Math.abs(minutes(b.time) - preferred))
     || minutes(a.time) - minutes(b.time) || a.index - b.index);
   if (primary.length) return primary[0];
   const cutoff = day === 6 ? config.saturdayCutoff : day === 0 ? config.sundayCutoff : config.windowEnd;

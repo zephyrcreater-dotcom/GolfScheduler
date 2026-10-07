@@ -45,6 +45,13 @@ test('preferred window outranks fallback; boundaries and day-specific cutoffs',(
  assert.equal(selectTeeTime(times(['05:59','07:31']),'2026-10-11',settings),null);
  assert.equal(selectTeeTime([],'2026-10-10',settings),null);
 });
+test('Sunday selects earliest eligible time while Saturday keeps its preferred-time ranking',()=>{
+ const slots=times(['06:35','06:20','06:00','05:59','07:01']);
+ assert.equal(selectTeeTime(slots,'2026-10-18',settings).time,'06:00');
+ assert.equal(selectTeeTime(slots,'2026-10-17',settings).time,'06:35');
+ assert.equal(selectTeeTime(times(['07:30','07:10','07:01']),'2026-10-18',settings).time,'07:01');
+ assert.equal(selectTeeTime(times(['07:31','09:01']),'2026-10-18',settings),null);
+});
 test('capacity filtering and Los Angeles date boundary',()=>{
  const slots=times(['06:35','06:40']);slots[0].maxGolfers=1;
  assert.equal(selectTeeTime(slots,'2026-10-10',{...settings,golfers:2}).time,'06:40');
