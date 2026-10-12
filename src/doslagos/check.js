@@ -4,6 +4,7 @@ const config = require('./config');
 const { selectTeeTime, candidateDates } = require('./selection');
 const storage = require('./state');
 const notify = require('./notify');
+const { recoverDate, UNCERTAIN, MAX_ATTEMPTS } = require('./recovery');
 const STATE_PATH = path.join(__dirname, '../../data/doslagos-state.json');
 
 // A lock is written BEFORE adding anything to cart. Even a crash after the
@@ -43,8 +44,14 @@ async function checkDate(date, { file = STATE_PATH, settings = config,
       console.log(`${date}: matching ${target.time}; booking paused while another cart/purchase needs review.`);
       return;
     }
+    if (completePurchase && (state[date].attemptCount || 0) >= MAX_ATTEMPTS) {
+      state[date].status = 'retry-exhausted';
+      await store.save(file, state);
+      return;
+    }
     console.log(`${date}: selected ${target.time}, ${settings.golfers} golfer(s).`);
     state[date] = { ...state[date], status: 'attempting', time: target.time, golfers: settings.golfers,
+      attemptCount: (state[date].attemptCount || 0) + 1,
       attemptedAt: new Date().toISOString() };
     await store.save(file, state);
     await notifier.found({date, time:target.time, golfers:settings.golfers, price:target.price});
@@ -130,6 +137,16 @@ async function main(args = process.argv.slice(2), overrides = {}) {
   console.log(JSON.stringify({watch, paymentInputEnabled: fillPayment, finalPurchaseClickEnabled: completePurchase}));
   let sharedSite = null;
   let sessionReady = false;
+  const recover = async target => {
+    if (sharedSite) await sharedSite.close().catch(() => {});
+    sharedSite = null;
+    sessionReady = false;
+    await recoverDate(target, { store, file, notifier,
+      createSite: overrides.createSite || (() => new (require('./site'))()),
+      book: site => checkDate(target, { ...overrides, file, fillPayment, completePurchase,
+        sharedSite: site, allowBooking: true }),
+    });
+  };
   try {
     do {
       const dates = date ? [date] : (overrides.dates || candidateDates(config));
@@ -139,6 +156,11 @@ async function main(args = process.argv.slice(2), overrides = {}) {
         if (controller.signal.aborted) break;
         try {
           let current = await store.load(file);
+          if (completePurchase && overrides.allowBooking !== false && UNCERTAIN.has(current[target]?.status)) {
+            await recover(target);
+            historyChecked = false;
+            continue;
+          }
           if (current[target] && ['confirmed','held'].includes(current[target].status)) {
             console.log(`${target}: ${current[target].status}; skipping.`);
             continue;
@@ -169,7 +191,7 @@ async function main(args = process.argv.slice(2), overrides = {}) {
             if (!pendingCart) {
               for (const entry of Object.values(current)) {
                 if (['attempting','purchase-attempted','needs-review'].includes(entry.status)) {
-                  entry.status = 'none';
+                  entry.status = (entry.attemptCount || 0) >= MAX_ATTEMPTS ? 'retry-exhausted' : 'none';
                   entry.historyVerifiedAbsentAt = new Date().toISOString();
                   delete entry.error;
                 }
@@ -193,6 +215,18 @@ async function main(args = process.argv.slice(2), overrides = {}) {
             error.notified = true;
           }
           if (error.blocked || error.fatalStartup || error.historyUnavailable || !sessionReady) throw error;
+          if (completePurchase && overrides.allowBooking !== false &&
+              UNCERTAIN.has((await store.load(file))[target]?.status)) {
+            historyChecked = false;
+            pendingCart = false;
+            try {
+              await recover(target);
+              continue;
+            } catch (retryError) {
+              console.error(`${target}: ${retryError.message}`);
+              if (retryError.blocked || retryError.fatalStartup) throw retryError;
+            }
+          }
           if (!watch) process.exitCode = 1;
         }
       }
