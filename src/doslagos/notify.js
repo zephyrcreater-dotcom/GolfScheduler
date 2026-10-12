@@ -116,7 +116,7 @@ function found({ date, time, golfers, price }) {
   return push({title:'Dos Lagos — matching tee time found',message:`${date} at ${time}, ${golfers} golfer(s)${price ? `, $${price}` : ''}. Starting one booking attempt for this date.`,priority:'high',tags:'golf'});
 }
 function outcome({ date, time, status, reason }) {
-  const titles = {confirmed:'Dos Lagos — booking confirmed',held:'Dos Lagos — checkout reached', 'needs-review':'Dos Lagos — booking needs review'};
+  const titles = {confirmed:'Dos Lagos — booking confirmed',held:'Dos Lagos — checkout reached', 'needs-review':'Dos Lagos — booking needs review', 'retry-exhausted':'Dos Lagos — both booking attempts failed'};
   return push({title:titles[status] || 'Dos Lagos booking update',message:`${date} at ${time}: ${status}.${reason ? ` ${reason}` : ''} This date is locked against further booking attempts.`,priority:status === 'held' ? 'default' : 'high',tags:'golf'});
 }
 function lifecycle(message) {

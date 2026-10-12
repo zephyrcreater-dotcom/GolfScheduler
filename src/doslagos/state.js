@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 // All reservation-bearing states block future attempts, including uncertain ones.
-const LOCKED = new Set(['held', 'attempting', 'purchase-attempted', 'needs-review', 'confirmed']);
+const LOCKED = new Set(['held', 'attempting', 'purchase-attempted', 'needs-review', 'confirmed', 'retry-exhausted']);
 function load(file) {
   try {
     const state = JSON.parse(fs.readFileSync(file, 'utf8'));
