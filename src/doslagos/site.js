@@ -6,6 +6,7 @@ const { browserStartupError } = require('./browser-error');
 const { verifyConfirmation } = require('./confirmation');
 const { parseHistoryCards } = require('./history');
 const { checkoutTrace } = require('./checkout-trace');
+const { enterCardNumber, ensureCardReady, cardStatus } = require('./payment');
 
 let _screenshotDirEnsured = false;
 
@@ -424,20 +425,6 @@ class DosLagosSite {
      * CARD NUMBER
      */
     result.number = false;
-    if (card.number) {
-      const digits = String(card.number).replace(/[\s-]/g, '');
-      if (!/^\d{12,19}$/.test(digits)) {
-        throw new Error('Test card number must contain 12–19 digits');
-      }
-      const field = this.page.locator('#credit-card-number-input');
-      await field.fill('');
-      await field.pressSequentially(digits, { delay: 100 });
-      await field.blur();
-      if ((await field.inputValue()).replace(/\D/g, '') !== digits) {
-        throw new Error('Card number entry lost digits; payment filling stopped');
-      }
-      result.number = true;
-    }
 
     /*
      * CARDHOLDER NAME
@@ -511,6 +498,13 @@ class DosLagosSite {
     const requiredCheckbox = this.page.locator('input[type="checkbox"][name="chb-nm"]');
     await requiredCheckbox.check();
     result.requiredCheckbox = await requiredCheckbox.isChecked();
+
+    // Enter the number last, after dropdown/billing updates have settled.
+    // Both input and blur events publish the final value to the checkout form.
+    if (card.number) {
+      await enterCardNumber(this.page, card.number);
+      result.number = true;
+    }
 
     return result;
   }
@@ -922,6 +916,11 @@ class DosLagosSite {
       let confirmation = null;
       let confirmationDetails = null;
       if (completePurchase) {
+        // Recheck after all dropdowns and billing controls have rerendered.
+        if (fillPayment) {
+          await ensureCardReady(this.page, paymentCard.number);
+          console.log('Payment preflight passed: card number matches configured value and field is valid.');
+        }
         await beforePurchase();
         const trace = checkoutTrace(this.page);
         try {
@@ -936,7 +935,10 @@ class DosLagosSite {
           const reason = invalidFields.length
             ? `Purchase not confirmed; invalid fields: ${invalidFields.join(', ')}. Review reservation history.`
             : 'Purchase not confirmed after 30 seconds; no visible invalid inputs. Review reservation history.';
-          throw new Error(`${reason} Network trace: ${trace.summary()}`);
+          const status = fillPayment
+            ? await cardStatus(this.page, paymentCard.number).catch(() => ({ unavailable: true }))
+            : null;
+          throw new Error(`${reason}${status ? ` Card field: ${JSON.stringify(status)}.` : ''} Network trace: ${trace.summary()}`);
         } finally {
           trace.stop();
         }
