@@ -922,7 +922,7 @@ class DosLagosSite {
           console.log('Payment preflight passed: card number matches configured value and field is valid.');
         }
         await beforePurchase();
-        const trace = checkoutTrace(this.page);
+        const trace = checkoutTrace(this.page, { expectedNumber: fillPayment ? paymentCard.number : '' });
         try {
           await this.completePurchase();
           await this.page.getByRole('heading', { name: 'Order Confirmed!', exact: true })
@@ -932,9 +932,10 @@ class DosLagosSite {
           const invalidFields = await this.page.locator('input[aria-invalid="true"], input:invalid')
             .evaluateAll(inputs => inputs.filter(input => input.getClientRects().length)
               .map(input => input.id || input.name || 'unnamed required input'));
-          const reason = invalidFields.length
+          await trace.settle();
+          const reason = trace.failure() || (invalidFields.length
             ? `Purchase not confirmed; invalid fields: ${invalidFields.join(', ')}. Review reservation history.`
-            : 'Purchase not confirmed after 30 seconds; no visible invalid inputs. Review reservation history.';
+            : 'Purchase not confirmed after 30 seconds; no visible invalid inputs. Review reservation history.');
           const status = fillPayment
             ? await cardStatus(this.page, paymentCard.number).catch(() => ({ unavailable: true }))
             : null;
