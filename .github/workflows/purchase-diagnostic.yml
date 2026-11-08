@@ -28,6 +28,7 @@ jobs:
     timeout-minutes: 12
     env:
       HEADLESS: 'false'
+      DOSLAGOS_BROWSER_CHANNEL: chrome
       DOSLAGOS_HORIZON_DAYS: '14'
       DOSLAGOS_TIMEZONE: America/Los_Angeles
       DOSLAGOS_PREFERRED_TIME: '06:35'
@@ -66,7 +67,7 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: doslagos-playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chrome
       - name: One approved purchase with shared lease
         env:
           DIAGNOSTIC_DATE: ${{ inputs.date }}

@@ -12,6 +12,7 @@ jobs:
     timeout-minutes: 8
     env:
       HEADLESS: 'false'
+      DOSLAGOS_BROWSER_CHANNEL: chrome
       GOLF_EMAIL: ${{ secrets.GOLF_EMAIL }}
       GOLF_PASSWORD: ${{ secrets.GOLF_PASSWORD }}
     steps:
@@ -21,6 +22,6 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --omit=dev
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chrome
       - name: Check login, history and booking-token GET in headed Chromium
         run: xvfb-run -a node src/doslagos/browser-diagnostic.js
