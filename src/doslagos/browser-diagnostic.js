@@ -1,16 +1,20 @@
 // Read-only diagnostic: never creates a cart or submits a purchase.
 
-async function diagnostic(site) {
+async function diagnostic(site, { startAtHistory = false, pageAccessOnly = false } = {}) {
   let apiRequest;
   site.page.on('request', request => {
     const url = new URL(request.url());
     if (request.method() === 'GET' && url.hostname === 'phx-api-be-east-1b.kenna.io' &&
         !url.pathname.includes('/profile')) apiRequest = request;
   });
-  await site.login();
+  await site.login({ startAtHistory });
   await site.reservationHistory();
   // Public workflow logs contain statuses only, never account reservation details.
   console.log(JSON.stringify({ headed: process.env.HEADLESS === 'false', historyReadSucceeded: true }));
+  if (pageAccessOnly) {
+    console.log(JSON.stringify({ pageAccessSucceeded: true, historyEntry: startAtHistory, purchaseAttempted: false }));
+    return;
+  }
   if (!apiRequest) throw new Error('No authenticated booking-service request observed');
   const apiBase = await site.page.evaluate(() => {
     const element = [...document.querySelectorAll('*')]
@@ -56,7 +60,10 @@ if (require.main === module) {
   const config = require('./config');
   (async () => {
     const site = new Site();
-    try { await site.init(); await diagnostic(site); }
+    try { await site.init(); await diagnostic(site, {
+      startAtHistory: process.env.DIAGNOSTIC_HISTORY_ENTRY === 'true',
+      pageAccessOnly: process.env.DIAGNOSTIC_PAGE_ACCESS_ONLY === 'true',
+    }); }
     finally { await site.close(); }
   })().catch(error => {
     let message = String(error.message);
