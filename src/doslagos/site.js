@@ -6,6 +6,7 @@ const { browserStartupError } = require('./browser-error');
 const { verifyConfirmation } = require('./confirmation');
 const { parseHistoryCards } = require('./history');
 const { checkoutTrace } = require('./checkout-trace');
+const { openLogin } = require('./login-entry');
 const { enterCardNumber, ensureCardReady, cardStatus } = require('./payment');
 
 let _screenshotDirEnsured = false;
@@ -131,32 +132,7 @@ class DosLagosSite {
       timeout: 60000,
     });
 
-    await this.page.waitForTimeout(2000);
-
-    const loginSelectors = [
-      'button:has-text("Login")',
-      'button:has-text("Sign Up")',
-      'a:has-text("Login")',
-      'button:has-text("Log In")',
-    ];
-
-    let clicked = false;
-
-    for (const sel of loginSelectors) {
-      const el = await this.page.$(sel);
-
-      if (el && await el.isVisible()) {
-        await el.click();
-        clicked = true;
-        break;
-      }
-    }
-
-    if (!clicked) {
-      throw new Error(
-        'Could not find Login link on Dos Lagos site'
-      );
-    }
+    await openLogin(this.page, () => this._checkForBlocks());
 
     await this.page
       .waitForURL(/\/login/, { timeout: 15000 })
