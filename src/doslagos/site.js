@@ -948,7 +948,10 @@ class DosLagosSite {
   }
 
   async reservationHistory() {
-    await this.page.goto(`${config.site.baseUrl}/reservation/history`, {waitUntil:'domcontentloaded',timeout:30000});
+    if (new URL(this.page.url()).pathname !== '/reservation/history') {
+      await this.page.getByRole('link', { name: /^reservations$/i }).first().click({ timeout: 20000 });
+    }
+    await this._checkForBlocks();
     const container = this.page.getByTestId('reservations-page-container');
     await container.waitFor({state:'visible',timeout:15000});
     await this.page.waitForFunction(() => {
