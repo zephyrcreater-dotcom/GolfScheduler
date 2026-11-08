@@ -6,7 +6,8 @@ const { browserStartupError } = require('./browser-error');
 const { verifyConfirmation } = require('./confirmation');
 const { parseHistoryCards } = require('./history');
 const { checkoutTrace } = require('./checkout-trace');
-const { openLogin } = require('./login-entry');
+const { openLogin, waitForAutomaticCheck } = require('./login-entry');
+const { searchByCalendar, assertDisplayedDate } = require('./calendar');
 const { enterCardNumber, ensureCardReady, cardStatus } = require('./payment');
 
 let _screenshotDirEnsured = false;
@@ -90,6 +91,8 @@ class DosLagosSite {
   }
 
   async _checkForBlocks() {
+    // Wait passively; never interact with or bypass a security challenge.
+    await waitForAutomaticCheck(this.page);
     const blockSelectors = [
       '.g-recaptcha',
       '#captcha',
@@ -142,10 +145,9 @@ class DosLagosSite {
 
     await this._checkForBlocks();
 
-    const emailField = await this.page.waitForSelector(
-      'input[type="email"], input[name="email"], input[name="username"]',
-      { timeout: 10000 }
-    );
+    const emailField = this.page.getByRole('textbox', { name: /email/i })
+      .or(this.page.locator('input[type="email"], input[name="email"], input[name="username"]')).first();
+    await emailField.waitFor({ state: 'visible', timeout: 20000 });
 
     await emailField.fill(this.email);
 
@@ -211,19 +213,8 @@ class DosLagosSite {
   /*
    * Navigate directly to a date's tee times.
    */
-  async searchDate(dateStr) {
-    const url =
-      `${config.site.baseUrl}/teetimes` +
-      `?course=${config.site.courseId}` +
-      `&date=${dateStr}`;
-
-    await this.page.goto(url, {
-      waitUntil: 'domcontentloaded',
-      timeout: 60000,
-    });
-
-    await this.page.waitForTimeout(3000);
-
+  async searchDate(dateStr, { allowUrlFallback = true } = {}) {
+    await searchByCalendar(this.page, dateStr, { ...config.site, allowUrlFallback, checkForBlocks: () => this._checkForBlocks() });
     await this._dismissModals();
   }
 
@@ -498,6 +489,7 @@ class DosLagosSite {
   ) {
     try {
       if (expectedSlot) {
+        await assertDisplayedDate(this.page, expectedSlot.date);
         const current = (await this.getAvailableTimes()).find(slot => slot.index === index);
         if (!current || current.time !== expectedSlot.time || current.price !== expectedSlot.price) {
           throw new Error('Selected tee time changed before booking; stopped for review');
@@ -956,7 +948,10 @@ class DosLagosSite {
   }
 
   async reservationHistory() {
-    await this.page.goto(`${config.site.baseUrl}/reservation/history`, {waitUntil:'domcontentloaded',timeout:30000});
+    if (new URL(this.page.url()).pathname !== '/reservation/history') {
+      await this.page.getByRole('link', { name: /^reservations$/i }).first().click({ timeout: 20000 });
+    }
+    await this._checkForBlocks();
     const container = this.page.getByTestId('reservations-page-container');
     await container.waitFor({state:'visible',timeout:15000});
     await this.page.waitForFunction(() => {

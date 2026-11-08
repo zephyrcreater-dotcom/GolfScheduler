@@ -6,6 +6,10 @@ on:
         description: 'Diagnostic date YYYY-MM-DD'
         required: true
         type: string
+      time:
+        description: 'Optional exact test time HH:MM (one-run override only)'
+        required: false
+        type: string
       approve_duplicate:
         description: 'Approve ONE additional real reservation, possibly a duplicate'
         required: true
@@ -66,5 +70,6 @@ jobs:
       - name: One approved purchase with shared lease
         env:
           DIAGNOSTIC_DATE: ${{ inputs.date }}
+          DIAGNOSTIC_TIME: ${{ inputs.time }}
           APPROVE_DUPLICATE_PURCHASE: ${{ inputs.approve_duplicate }}
         run: xvfb-run -a node src/doslagos/purchase-diagnostic.js

@@ -11,7 +11,9 @@ test('manual duplicate diagnostic preserves confirmed state and can submit only 
     notifier: { error: async () => {}, outcome: async () => {} },
     settings: { windowStart: '06:00', windowEnd: '07:00', preferredTime: '06:35', sundayCutoff: '07:30', golfers: 1 },
     site: { init: async () => {}, login: async () => {}, reservationHistory: async () => [],
-      hasPendingCart: async () => false, searchDate: async () => {}, close: async () => {},
+      hasPendingCart: async () => false, searchDate: async (selected, options) => {
+        assert.equal(selected,date); assert.equal(options.allowUrlFallback,false);
+      }, close: async () => {},
       getAvailableTimes: async () => [{ index: 0, time: '06:24' }],
       reserveAndReachCheckout: async (_, __, input) => { calls++; await input.beforePurchase(); return { confirmation: '#DIAGNOSTIC' }; } },
   };

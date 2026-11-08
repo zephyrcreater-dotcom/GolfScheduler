@@ -1,9 +1,16 @@
 // Manual only: one explicitly approved extra purchase, preserving existing bookings.
-async function purchaseDiagnostic(date, { store, site, settings, notifier }) {
+function diagnosticSettings(settings, time) {
+  if (!time) return settings;
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error('Diagnostic time must be HH:MM');
+  return { ...settings, preferredTime: time, windowStart: time, windowEnd: time,
+    saturdayCutoff: time, sundayCutoff: time };
+}
+async function purchaseDiagnostic(date, { store, site, settings, notifier, requestedTime = '' }) {
   if (process.env.APPROVE_DUPLICATE_PURCHASE !== 'true' || !/^\d{4}-\d{2}-\d{2}$/.test(date || '') ||
       new Date(`${date}T12:00:00Z`).toISOString().slice(0, 10) !== date) {
     throw new Error('Diagnostic purchase requires a valid date and explicit duplicate approval');
   }
+  settings = diagnosticSettings(settings, requestedTime);
   const release = await store.acquire();
   let state;
   try {
@@ -11,9 +18,10 @@ async function purchaseDiagnostic(date, { store, site, settings, notifier }) {
     if (state[date]?.diagnosticPurchase) throw new Error('This date already has a diagnostic attempt; refusing another');
     await site.init();
     await site.login();
-    await site.reservationHistory();
+    // This manually approved extra purchase deliberately preserves the existing
+    // confirmed record. Stay in the main site's UI; do not deep-link to history.
     if (await site.hasPendingCart()) throw new Error('Pending cart; diagnostic stopped');
-    await site.searchDate(date);
+    await site.searchDate(date, { allowUrlFallback: false });
     const target = require('./selection').selectTeeTime(await site.getAvailableTimes(), date, settings);
     if (!target) throw new Error('No eligible time for diagnostic purchase');
     state[date] = { ...state[date], diagnosticPurchase: { status: 'attempting', time: target.time,
@@ -47,6 +55,7 @@ if (require.main === module) {
   const Redis = require('./redis-state'), Site = require('./site');
   purchaseDiagnostic(process.env.DIAGNOSTIC_DATE, {
     store: new Redis(), site: new Site(), settings: require('./config'), notifier: require('./notify'),
+    requestedTime: process.env.DIAGNOSTIC_TIME || '',
   }).catch(error => { console.error(error.message); process.exitCode = 1; });
 }
-module.exports = { purchaseDiagnostic };
+module.exports = { purchaseDiagnostic, diagnosticSettings };
