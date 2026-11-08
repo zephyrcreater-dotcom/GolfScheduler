@@ -26,10 +26,10 @@ async function openLogin(page, checkForBlocks) {
   }
 }
 
-async function waitForAutomaticCheck(page) {
+async function waitForAutomaticCheck(page, timeoutMs = 20000) {
   if (!/just a moment|attention required/i.test(await page.title())) return;
   await page.waitForFunction(() => !/just a moment|attention required/i.test(document.title),
-    null, { timeout: 20000 }).catch(() => {});
+    null, { timeout: timeoutMs }).catch(() => {});
   if (/just a moment|attention required/i.test(await page.title())) {
     const error = new Error('BLOCKED: browser security challenge did not clear automatically');
     error.blocked = true;

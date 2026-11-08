@@ -132,13 +132,20 @@ class DosLagosSite {
   /*
    * Login to the TeeItUp site.
    */
-  async login() {
-    await this.page.goto(config.site.baseUrl, {
+  async login({ startAtHistory = false } = {}) {
+    await this.page.goto(startAtHistory ? `${config.site.baseUrl}/reservation/history` : config.site.baseUrl, {
       waitUntil: 'domcontentloaded',
       timeout: 60000,
     });
 
-    await openLogin(this.page, () => this._checkForBlocks());
+    if (startAtHistory) {
+      console.log('History entry: waiting up to 30 seconds for normal browser verification.');
+      await waitForAutomaticCheck(this.page, 30000);
+    }
+    // History may already redirect an unauthenticated visitor to the login form.
+    if (!new URL(this.page.url()).pathname.includes('/login')) {
+      await openLogin(this.page, () => this._checkForBlocks());
+    }
 
     await this.page
       .waitForURL(/\/login/, { timeout: 15000 })

@@ -35,3 +35,17 @@ test('public diagnostics never log reservations, authentication headers or token
     assert.doesNotMatch(output.join('\n'), /private-|authorization|cookie|reservations/);
   } finally { console.log = log; global.fetch = request; }
 });
+
+test('history-first page access stops after authenticated history without token or purchase requests', async () => {
+  const page=new EventEmitter(); let loginOptions, historyReads=0;
+  const site={page,login:async options=>{loginOptions=options;},reservationHistory:async()=>{historyReads++;return [];} };
+  const output=[],before=console.log;
+  console.log=value=>output.push(value);
+  try {
+    await diagnostic(site,{startAtHistory:true,pageAccessOnly:true});
+    assert.deepEqual(loginOptions,{startAtHistory:true}); assert.equal(historyReads,1);
+    assert.match(output.join('\n'),/"pageAccessSucceeded":true/);
+    assert.match(output.join('\n'),/"purchaseAttempted":false/);
+    assert.doesNotMatch(output.join('\n'),/tokenRequestSucceeded/);
+  } finally {console.log=before;}
+});
