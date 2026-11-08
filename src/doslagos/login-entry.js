@@ -26,4 +26,14 @@ async function openLogin(page, checkForBlocks) {
   }
 }
 
-module.exports = { findLoginEntry, openLogin };
+async function waitForAutomaticCheck(page) {
+  if (!/just a moment|attention required/i.test(await page.title())) return;
+  await page.waitForFunction(() => !/just a moment|attention required/i.test(document.title),
+    null, { timeout: 20000 }).catch(() => {});
+  if (/just a moment|attention required/i.test(await page.title())) {
+    const error = new Error('BLOCKED: browser security challenge did not clear automatically');
+    error.blocked = true;
+    throw error;
+  }
+}
+module.exports = { findLoginEntry, openLogin, waitForAutomaticCheck };

@@ -6,7 +6,7 @@ const { browserStartupError } = require('./browser-error');
 const { verifyConfirmation } = require('./confirmation');
 const { parseHistoryCards } = require('./history');
 const { checkoutTrace } = require('./checkout-trace');
-const { openLogin } = require('./login-entry');
+const { openLogin, waitForAutomaticCheck } = require('./login-entry');
 const { searchByCalendar, assertDisplayedDate } = require('./calendar');
 const { enterCardNumber, ensureCardReady, cardStatus } = require('./payment');
 
@@ -91,11 +91,8 @@ class DosLagosSite {
   }
 
   async _checkForBlocks() {
-    if (/just a moment|attention required/i.test(await this.page.title())) {
-      const error = new Error('BLOCKED: browser security challenge detected');
-      error.blocked = true;
-      throw error;
-    }
+    // Wait passively; never interact with or bypass a security challenge.
+    await waitForAutomaticCheck(this.page);
     const blockSelectors = [
       '.g-recaptcha',
       '#captcha',

@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const { findLoginEntry, openLogin } = require('../src/doslagos/login-entry');
+const { findLoginEntry, openLogin, waitForAutomaticCheck } = require('../src/doslagos/login-entry');
 test('selects a visible sign-in control instead of hidden or disabled duplicates', () => {
   const previousDocument = global.document, previousStyle = global.getComputedStyle;
   const control = (text, visible = true, disabled = false, label = '') => ({ textContent: text, disabled,
@@ -28,4 +28,11 @@ test('persistent loading stops after two waits; a security block never reloads',
   assert.equal(reloads, 1);
   await assert.rejects(openLogin(page, async () => { throw Error('Security challenge'); }), /Security challenge/);
   assert.equal(reloads, 1);
+});
+test('automatic browser checks may finish normally but persistent challenges stay blocked', async () => {
+  let title = 'Just a moment...', waits = 0;
+  await waitForAutomaticCheck({ title: async()=>title, waitForFunction:async()=>{waits++;title='Dos Lagos';} });
+  assert.equal(waits,1);
+  await assert.rejects(waitForAutomaticCheck({ title:async()=> 'Just a moment...',
+    waitForFunction:async()=>{throw Error('Timeout');} }), error=>error.blocked === true);
 });
