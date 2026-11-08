@@ -37,7 +37,7 @@ async function selectCalendarDate(page, date) {
   }
   throw new Error('Target month is outside the supported calendar navigation range');
 }
-async function searchByCalendar(page, date, { baseUrl, courseId, checkForBlocks }) {
+async function searchByCalendar(page, date, { baseUrl, courseId, checkForBlocks, allowUrlFallback = true }) {
   dateParts(date);
   await checkForBlocks();
   try {
@@ -46,6 +46,7 @@ async function searchByCalendar(page, date, { baseUrl, courseId, checkForBlocks 
   } catch (error) {
     // Do not switch routes around a security challenge.
     await checkForBlocks();
+    if (!allowUrlFallback) throw error;
     console.log(`${date}: calendar unavailable; trying verified URL fallback.`);
     await page.goto(`${baseUrl}/teetimes?course=${encodeURIComponent(courseId)}&date=${date}&max=999999`,
       { waitUntil: 'domcontentloaded', timeout: 60000 });

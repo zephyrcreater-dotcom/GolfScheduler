@@ -47,6 +47,11 @@ test('security challenges stop navigation instead of triggering fallback', async
     ...options,checkForBlocks:async()=>{throw Error('Security challenge');}
   }),/Security challenge/); assert.equal(f.fallback(),0);
 });
+test('calendar-only diagnostics never use a date URL when the calendar is unavailable', async () => {
+  const f=fixture({failCalendar:true});
+  await assert.rejects(searchByCalendar(f.page,'2026-11-13',{...options,allowUrlFallback:false}),/Missing calendar/);
+  assert.equal(f.fallback(),0);
+});
 test('exact diagnostic time is isolated from recurring preferences and permits no fallback times', () => {
   const base=Object.freeze({preferredTime:'06:35',windowStart:'06:00',windowEnd:'07:00',saturdayCutoff:'09:00',sundayCutoff:'07:30',golfers:1});
   const override=diagnosticSettings(base,'13:23');

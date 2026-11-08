@@ -213,8 +213,8 @@ class DosLagosSite {
   /*
    * Navigate directly to a date's tee times.
    */
-  async searchDate(dateStr) {
-    await searchByCalendar(this.page, dateStr, { ...config.site, checkForBlocks: () => this._checkForBlocks() });
+  async searchDate(dateStr, { allowUrlFallback = true } = {}) {
+    await searchByCalendar(this.page, dateStr, { ...config.site, allowUrlFallback, checkForBlocks: () => this._checkForBlocks() });
     await this._dismissModals();
   }
 

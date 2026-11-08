@@ -18,9 +18,10 @@ async function purchaseDiagnostic(date, { store, site, settings, notifier, reque
     if (state[date]?.diagnosticPurchase) throw new Error('This date already has a diagnostic attempt; refusing another');
     await site.init();
     await site.login();
-    await site.reservationHistory();
+    // This manually approved extra purchase deliberately preserves the existing
+    // confirmed record. Stay in the main site's UI; do not deep-link to history.
     if (await site.hasPendingCart()) throw new Error('Pending cart; diagnostic stopped');
-    await site.searchDate(date);
+    await site.searchDate(date, { allowUrlFallback: false });
     const target = require('./selection').selectTeeTime(await site.getAvailableTimes(), date, settings);
     if (!target) throw new Error('No eligible time for diagnostic purchase');
     state[date] = { ...state[date], diagnosticPurchase: { status: 'attempting', time: target.time,
