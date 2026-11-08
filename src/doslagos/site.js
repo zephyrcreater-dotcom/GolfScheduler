@@ -27,8 +27,11 @@ class DosLagosSite {
       this.browser = await chromium.launch({
         headless: process.env.HEADLESS === 'true',
         executablePath: config.chromiumExecutablePath,
+        channel: config.chromiumExecutablePath ? undefined : config.browserChannel,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
+      console.log(JSON.stringify({ browserChannel: config.chromiumExecutablePath ? 'configured-executable' : config.browserChannel || 'chromium',
+        headless: process.env.HEADLESS === 'true', browserVersion: this.browser.version() }));
 
       this.context = await this.browser.newContext({
         viewport: { width: 1280, height: 900 },
