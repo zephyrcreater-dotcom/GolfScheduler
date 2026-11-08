@@ -7,6 +7,7 @@ const { verifyConfirmation } = require('./confirmation');
 const { parseHistoryCards } = require('./history');
 const { checkoutTrace } = require('./checkout-trace');
 const { openLogin } = require('./login-entry');
+const { searchByCalendar, assertDisplayedDate } = require('./calendar');
 const { enterCardNumber, ensureCardReady, cardStatus } = require('./payment');
 
 let _screenshotDirEnsured = false;
@@ -90,6 +91,11 @@ class DosLagosSite {
   }
 
   async _checkForBlocks() {
+    if (/just a moment|attention required/i.test(await this.page.title())) {
+      const error = new Error('BLOCKED: browser security challenge detected');
+      error.blocked = true;
+      throw error;
+    }
     const blockSelectors = [
       '.g-recaptcha',
       '#captcha',
@@ -142,10 +148,9 @@ class DosLagosSite {
 
     await this._checkForBlocks();
 
-    const emailField = await this.page.waitForSelector(
-      'input[type="email"], input[name="email"], input[name="username"]',
-      { timeout: 10000 }
-    );
+    const emailField = this.page.getByRole('textbox', { name: /email/i })
+      .or(this.page.locator('input[type="email"], input[name="email"], input[name="username"]')).first();
+    await emailField.waitFor({ state: 'visible', timeout: 20000 });
 
     await emailField.fill(this.email);
 
@@ -212,18 +217,7 @@ class DosLagosSite {
    * Navigate directly to a date's tee times.
    */
   async searchDate(dateStr) {
-    const url =
-      `${config.site.baseUrl}/teetimes` +
-      `?course=${config.site.courseId}` +
-      `&date=${dateStr}`;
-
-    await this.page.goto(url, {
-      waitUntil: 'domcontentloaded',
-      timeout: 60000,
-    });
-
-    await this.page.waitForTimeout(3000);
-
+    await searchByCalendar(this.page, dateStr, { ...config.site, checkForBlocks: () => this._checkForBlocks() });
     await this._dismissModals();
   }
 
@@ -498,6 +492,7 @@ class DosLagosSite {
   ) {
     try {
       if (expectedSlot) {
+        await assertDisplayedDate(this.page, expectedSlot.date);
         const current = (await this.getAvailableTimes()).find(slot => slot.index === index);
         if (!current || current.time !== expectedSlot.time || current.price !== expectedSlot.price) {
           throw new Error('Selected tee time changed before booking; stopped for review');
