@@ -36,4 +36,26 @@ async function waitForAutomaticCheck(page, timeoutMs = 20000) {
     throw error;
   }
 }
-module.exports = { findLoginEntry, openLogin, waitForAutomaticCheck };
+
+async function waitForLoginForm(page, checkForBlocks) {
+  // Filter before first(): a hidden duplicate must not mask the active form.
+  const email = page.getByRole('textbox', { name: /email/i })
+    .or(page.locator('input[type="email"], input[name="email"], input[name="username"]'))
+    .filter({ visible: true }).first();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await checkForBlocks();
+    try {
+      await email.waitFor({ state: 'visible', timeout: 30000 });
+      return email;
+    } catch (error) {
+      if (error.name !== 'TimeoutError') throw error;
+      await checkForBlocks();
+      if (attempt === 1) {
+        throw new Error(`Login email field did not become visible after one reload (route: ${new URL(page.url()).pathname})`);
+      }
+      console.log('Login form not ready after 30 seconds; reloading once before entering credentials.');
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
+    }
+  }
+}
+module.exports = { findLoginEntry, openLogin, waitForAutomaticCheck, waitForLoginForm };
