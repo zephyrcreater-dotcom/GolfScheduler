@@ -6,7 +6,6 @@ const logger = require('./logger');
 
 const COURSES = config.site.courses;
 
-// Module-level flag: screenshot dir is created at most once per process lifetime.
 let _screenshotDirEnsured = false;
 
 class SiteAutomation {
@@ -51,17 +50,13 @@ class SiteAutomation {
     return filePath;
   }
 
-  /**
-   * Navigate to the member booking page for a specific course and date.
-   */
   async navigateToBooking(courseId, date) {
     const url = `${config.site.memberUrl}/teetimes?course=${courseId}&date=${date}`;
     logger.info(`Navigating to: ${url}`);
     await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    // Wait for the React app to hydrate
+
     await this.page.waitForTimeout(3000);
 
-    // If we landed on Course Info or home, click Tee Times nav link
     try {
       const teeTimesNav = await this.page.$('a:has-text("Tee Times"), button:has-text("Tee Times")');
       if (teeTimesNav && await teeTimesNav.isVisible()) {
@@ -69,17 +64,12 @@ class SiteAutomation {
         await this.page.waitForTimeout(3000);
         logger.info('Clicked Tee Times nav link');
       }
-    } catch { /* already on tee times page */ }
+    } catch {                                 }
   }
 
-  /**
-   * Log in via GolfID. The member booking page triggers a login modal/redirect.
-   */
   async login() {
     logger.info('Starting login process...');
 
-    // The TeeItUp site shows a login prompt for member bookings.
-    // Look for common login triggers: "Sign In", "Log In", "Member Login" buttons
     const loginSelectors = [
       'button:has-text("Sign In")',
       'button:has-text("Log In")',
@@ -103,22 +93,20 @@ class SiteAutomation {
           break;
         }
       } catch {
-        // Try next selector
+
       }
     }
 
     if (!loginClicked) {
-      // Maybe already on login page or login is embedded
+
       logger.info('No login button found — checking if login form is already visible...');
     }
 
     await this.page.waitForTimeout(2000);
 
-    // Handle GolfID login form — could be in an iframe or modal
     const frame = await this._findLoginFrame();
     const loginContext = frame || this.page;
 
-    // Wait for email field
     const emailSelectors = [
       'input[type="email"]',
       'input[name="email"]',
@@ -138,7 +126,7 @@ class SiteAutomation {
           break;
         }
       } catch {
-        // Try next
+
       }
     }
 
@@ -147,12 +135,10 @@ class SiteAutomation {
       throw new Error('Could not find email input field on login page');
     }
 
-    // Fill credentials
     await emailField.fill(this.email);
     logger.info(`Email entered: ${this.email}`);
     logger.debug(`Password length: ${this.password.length}`);
 
-    // Find and fill password
     const passwordSelectors = [
       'input[type="password"]',
       'input[name="password"]',
@@ -165,7 +151,7 @@ class SiteAutomation {
         passwordField = await loginContext.$(sel);
         if (passwordField) break;
       } catch {
-        // Try next
+
       }
     }
 
@@ -177,7 +163,6 @@ class SiteAutomation {
     await passwordField.fill(this.password);
     logger.info('Password entered');
 
-    // Click submit
     const submitSelectors = [
       'button[type="submit"]',
       'button:has-text("Sign In")',
@@ -197,26 +182,24 @@ class SiteAutomation {
           break;
         }
       } catch {
-        // Try next
+
       }
     }
 
     if (!submitted) {
-      // Try pressing Enter as fallback
+
       await passwordField.press('Enter');
       logger.info('Login submitted via Enter key');
     }
 
-    // Wait for login to complete — page should redirect or modal close
     await this.page.waitForTimeout(5000);
 
-    // Handle email verification interstitial — dismiss or continue past it
     try {
       const verifyEl = await loginContext.$('text=verify your email');
       if (verifyEl) {
         logger.info('Email verification prompt detected — attempting to dismiss...');
         await this.screenshot('login-verify-prompt');
-        // Try clicking dismiss/close/continue buttons
+
         const dismissSelectors = [
           'button:has-text("Continue")',
           'button:has-text("Close")',
@@ -235,17 +218,16 @@ class SiteAutomation {
               logger.info(`Clicked dismiss button: ${sel}`);
               break;
             }
-          } catch { /* try next */ }
+          } catch {                }
         }
-        // Also try clicking outside the modal on the main page
+
         try {
           await this.page.click('body', { position: { x: 640, y: 10 } });
-        } catch { /* ignore */ }
+        } catch {              }
         await this.page.waitForTimeout(3000);
       }
-    } catch { /* no verification prompt */ }
+    } catch {                              }
 
-    // Check for hard authentication errors (wrong password)
     const errorSelectors = [
       'text=could not authenticate',
       'text=invalid credentials',
@@ -265,15 +247,12 @@ class SiteAutomation {
       }
     }
 
-    // Check for CAPTCHA or security blocks
     await this._checkForBlocks();
 
-    // Verify login succeeded — look for logged-in indicators
-    // Wait extra time for post-login page load
     await this.page.waitForTimeout(3000);
     const loggedIn = await this._verifyLoggedIn();
     if (!loggedIn) {
-      // Take screenshot for debugging but don't fail — the page may still be usable
+
       await this.screenshot('login-status-unclear');
       logger.warn('Could not confirm login status — proceeding anyway to check if booking page is accessible');
     }
@@ -291,23 +270,16 @@ class SiteAutomation {
           return frame;
         }
       } catch {
-        // Frame may not be accessible
+
       }
     }
     return null;
   }
 
-  /**
-   * Click the shopping cart icon in the header to open the cart panel.
-   * The cart icon is the RIGHTMOST element in the header (to the right of the user name).
-   * Must distinguish it from the user name/avatar which is just to its left.
-   * Returns true if the cart panel was opened.
-   */
   async _clickCartIcon() {
-    // First dismiss any open dropdowns (like user menu) that could interfere
+
     await this._dismissModals();
 
-    // Strategy 1: Find cart by aria-label or data-testid
     const cartSelectors = [
       'header [aria-label*="cart" i]',
       'header button[aria-label*="cart" i]',
@@ -332,17 +304,16 @@ class SiteAutomation {
           await this.page.waitForTimeout(2000);
           return true;
         }
-      } catch { /* try next */ }
+      } catch {                }
     }
 
-    // Strategy 2: Find the MuiBadge (cart count indicator) — this is unique to the cart icon
     try {
       const badgeClicked = await this.page.evaluate(() => {
-        // The cart icon has a MuiBadge showing the item count
+
         const badges = document.querySelectorAll('.MuiBadge-root, [class*="Badge"]');
         for (const badge of badges) {
           const rect = badge.getBoundingClientRect();
-          // Must be in the header area (top of page, right side)
+
           if (rect.top < 60 && rect.left > window.innerWidth * 0.8 && rect.width > 0) {
             const clickTarget = badge.closest('button') || badge.closest('a') || badge;
             clickTarget.click();
@@ -356,13 +327,11 @@ class SiteAutomation {
         await this.page.waitForTimeout(2000);
         return true;
       }
-    } catch { /* ignore */ }
+    } catch {              }
 
-    // Strategy 3: Find the RIGHTMOST clickable element in the header
-    // The cart icon is always the last icon in the header bar, after the user name
     try {
       const clicked = await this.page.evaluate(() => {
-        // Get all clickable elements in the top header bar
+
         const headerEls = document.querySelectorAll('header button, header a, header svg, nav button, nav a');
         let rightmost = null;
         let maxRight = 0;
@@ -370,7 +339,7 @@ class SiteAutomation {
         for (const el of headerEls) {
           const rect = el.getBoundingClientRect();
           if (rect.top < 60 && rect.height > 0 && rect.width > 0 && rect.width < 80) {
-            // The cart icon is a small button/svg, not the wide user name button
+
             if (rect.right > maxRight) {
               maxRight = rect.right;
               rightmost = el;
@@ -390,7 +359,7 @@ class SiteAutomation {
         await this.page.waitForTimeout(2000);
         return true;
       }
-    } catch { /* ignore */ }
+    } catch {              }
 
     logger.warn('Could not find cart icon in header');
     return false;
@@ -398,17 +367,17 @@ class SiteAutomation {
 
   async _dismissModals() {
     try {
-      // Close any MUI popovers blocking the page
+
       const backdrop = await this.page.$('.MuiBackdrop-root');
       if (backdrop) {
         await backdrop.click({ force: true });
         await this.page.waitForTimeout(500);
         logger.debug('Dismissed MUI backdrop');
       }
-      // Press Escape to close any open modals/popovers
+
       await this.page.keyboard.press('Escape');
       await this.page.waitForTimeout(500);
-      // Close any X buttons on alerts/banners
+
       const closeBtn = await this.page.$('[aria-label="Close"], button:has-text("×"), .MuiAlert-action button');
       if (closeBtn && await closeBtn.isVisible()) {
         await closeBtn.click({ force: true });
@@ -416,7 +385,7 @@ class SiteAutomation {
         logger.debug('Dismissed alert/banner');
       }
     } catch {
-      // Ignore dismiss errors
+
     }
   }
 
@@ -450,7 +419,7 @@ class SiteAutomation {
   }
 
   async _verifyLoggedIn() {
-    // Look for indicators the user is logged in
+
     const indicators = [
       'text=Welcome',
       'text=Sign Out',
@@ -467,31 +436,25 @@ class SiteAutomation {
         const el = await this.page.$(sel);
         if (el) return true;
       } catch {
-        // Try next
+
       }
     }
 
-    // Also check if tee times are now visible (login may just show the booking UI)
     try {
       const teeTimeEl = await this.page.$('.tee-time, [class*="teeTime"], [class*="TeeTime"]');
       if (teeTimeEl) return true;
     } catch {
-      // Not found
+
     }
 
     return false;
   }
 
-  /**
-   * Select a specific course by name. Returns the courseId actually selected.
-   * @param {string} courseName - 'Pines' or 'Oaks'
-   */
   async selectCourse(courseName = 'Pines') {
     const target = courseName === 'Oaks' ? COURSES.oaks : COURSES.pines;
     const targetRegex = new RegExp(courseName, 'i');
     logger.info(`Selecting course: ${courseName}...`);
 
-    // Look for course selector dropdown
     const courseSelectors = [
       'select[name*="course" i]',
       'select[id*="course" i]',
@@ -519,11 +482,10 @@ class SiteAutomation {
           }
         }
       } catch {
-        // Try next selector
+
       }
     }
 
-    // Try filter button-based course selector (sidebar checkboxes/buttons)
     const filterSel = `button:has-text("${courseName} Course"), button:has-text("${courseName}"), a:has-text("${courseName}"), [class*="tab"]:has-text("${courseName}")`;
     const filter = await this.page.$(filterSel);
     if (filter && await filter.isVisible()) {
@@ -536,30 +498,22 @@ class SiteAutomation {
       return target.id;
     }
 
-    // Course may already be selected via URL parameter
     logger.info(`No course selector found — ${courseName} may be set via URL`);
     return target.id;
   }
 
-  /**
-   * Scroll the tee times page to ensure all times are loaded, then dismiss any overlays.
-   */
   async _prepareForBooking() {
     await this._dismissModals();
-    // Scroll down to load any lazy-loaded tee times
+
     await this.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await this.page.waitForTimeout(1000);
     await this.page.evaluate(() => window.scrollTo(0, 0));
     await this.page.waitForTimeout(500);
   }
 
-  /**
-   * Select a specific date on the booking calendar.
-   */
   async selectDate(dateStr) {
     logger.info(`Selecting date: ${dateStr}`);
 
-    // TeeItUp uses a date picker — try URL-based date selection first
     const currentUrl = this.page.url();
     if (!currentUrl.includes(`date=${dateStr}`)) {
       const url = new URL(currentUrl);
@@ -568,7 +522,6 @@ class SiteAutomation {
       await this.page.waitForTimeout(3000);
     }
 
-    // Also try clicking on date picker if present
     const datePickerSelectors = [
       `[data-date="${dateStr}"]`,
       `button:has-text("${this._formatDateForPicker(dateStr)}")`,
@@ -585,7 +538,7 @@ class SiteAutomation {
           break;
         }
       } catch {
-        // Try next
+
       }
     }
   }
@@ -597,20 +550,13 @@ class SiteAutomation {
     return `${months[parseInt(m) - 1]} ${parseInt(d)}`;
   }
 
-  /**
-   * Find and return available tee times on the current page.
-   * Returns array of { time, element, available }
-   */
   async getAvailableTeeTimes() {
     logger.info('Scanning for available tee times...');
 
-    // Wait for tee times to load, dismiss overlays
     await this.page.waitForTimeout(3000);
     await this._prepareForBooking();
     await this.screenshot('tee-times-page');
 
-    // TeeItUp renders tee times as cards in a grid, each with a "BOOK NOW" button.
-    // Find all "BOOK NOW" buttons and get their parent card containers.
     const bookButtons = await this.page.$$('button:has-text("Book Now"), button:has-text("BOOK NOW")');
     logger.info(`Found ${bookButtons.length} "Book Now" buttons`);
 
@@ -623,29 +569,27 @@ class SiteAutomation {
     const teeTimes = [];
     for (const btn of bookButtons) {
       try {
-        // Get the parent card — walk up from button until we find a container
-        // with a time string (the card usually has border/shadow styling)
+
         const cardText = await btn.evaluate(el => {
           let node = el.parentElement;
-          // Walk up max 3 levels to find the card that contains the time
+
           for (let i = 0; i < 3; i++) {
             if (!node) break;
             const text = node.textContent || '';
-            // Stop if we found a node containing a time pattern
+
             if (/\d{1,2}:\d{2}\s*(AM|PM)/i.test(text) && text.length < 300) {
               return text;
             }
             node = node.parentElement;
           }
-          // Fallback: just return the closest parent text
+
           return el.parentElement?.parentElement?.textContent || '';
         });
 
         logger.debug(`Card text: "${cardText.trim().slice(0, 120)}"`);
         const time = this._extractTime(cardText);
         if (time) {
-          // Check max player capacity from the card (e.g. "1 - 4" or "1 - 3").
-          // Only include tee times where 4 players is available.
+
           const playerMatch = cardText.match(/\b(\d)\s*[-–]\s*(\d)\b/);
           const maxPlayers = playerMatch ? parseInt(playerMatch[2], 10) : 4;
           if (maxPlayers < 4) {
@@ -669,13 +613,13 @@ class SiteAutomation {
   }
 
   _extractTime(text) {
-    // Match patterns like "12:00 PM", "9:30 AM", "12:00", etc.
+
     const match = text.match(/(\d{1,2}:\d{2})\s*(AM|PM|am|pm)?/);
     if (!match) return null;
 
     let [, time, period] = match;
     if (period) {
-      // Convert to 24-hour format
+
       let [h, m] = time.split(':').map(Number);
       if (period.toUpperCase() === 'PM' && h !== 12) h += 12;
       if (period.toUpperCase() === 'AM' && h === 12) h = 0;
@@ -684,31 +628,24 @@ class SiteAutomation {
     return time;
   }
 
-  /**
-   * Find consecutive tee time slots matching the target time (with fallback).
-   * Returns array of matching tee time objects, or empty if not enough found.
-   */
   findConsecutiveSlots(teeTimes, windowStart, windowEnd, slotsNeeded) {
     const winStartMin = this._timeToMinutes(windowStart);
     const winEndMin = this._timeToMinutes(windowEnd);
 
-    // Sort by time
     const sorted = [...teeTimes].sort(
       (a, b) => this._timeToMinutes(a.time) - this._timeToMinutes(b.time)
     );
 
-    // Filter to slots within the time window
     const candidates = sorted.filter(t => {
       const mins = this._timeToMinutes(t.time);
       return mins >= winStartMin && mins <= winEndMin;
     });
 
-    // Try each candidate as starting point, prefer earliest
     for (const candidate of candidates) {
       const idx = sorted.indexOf(candidate);
       const consecutive = this._getConsecutiveFrom(sorted, idx, slotsNeeded);
       if (consecutive) {
-        // Verify all slots fall within window
+
         const lastMin = this._timeToMinutes(consecutive[consecutive.length - 1].time);
         if (lastMin <= winEndMin) {
           logger.info(`Found ${slotsNeeded} consecutive slots in ${windowStart}-${windowEnd}: ${consecutive.map(t => t.time).join(', ')}`);
@@ -721,10 +658,6 @@ class SiteAutomation {
     return [];
   }
 
-  /**
-   * Find any available slots within the time window (not necessarily consecutive).
-   * Returns up to `maxSlots` slots sorted by time.
-   */
   findSlotsInWindow(teeTimes, windowStart, windowEnd, maxSlots) {
     const winStartMin = this._timeToMinutes(windowStart);
     const winEndMin = this._timeToMinutes(windowEnd);
@@ -745,7 +678,7 @@ class SiteAutomation {
     if (startIdx + count > sorted.length) return null;
 
     const slots = sorted.slice(startIdx, startIdx + count);
-    // Verify consecutive (each ~8-12 minutes apart)
+
     for (let i = 1; i < slots.length; i++) {
       const diff = this._timeToMinutes(slots[i].time) - this._timeToMinutes(slots[i - 1].time);
       if (diff < 5 || diff > 15) return null;
@@ -758,19 +691,13 @@ class SiteAutomation {
     return h * 60 + m;
   }
 
-  /**
-   * Book a single tee time slot.
-   * Clicks the slot, sets 4 players, and confirms.
-   * Returns { success, confirmationNumber, screenshotPath }
-   */
   async bookSlot(teeTimeEl, slotIndex) {
     logger.info(`Booking slot ${slotIndex}...`);
 
     try {
-      // Dismiss any MUI popovers/modals that may be blocking clicks
+
       await this._dismissModals();
 
-      // Scroll the button into view and click via JavaScript to bypass MUI overlays
       await teeTimeEl.evaluate(el => {
         el.scrollIntoView({ block: 'center' });
       });
@@ -778,8 +705,6 @@ class SiteAutomation {
       await teeTimeEl.evaluate(el => el.click());
       logger.info(`Clicked "Book Now" for slot ${slotIndex}`);
 
-      // Wait for the booking modal to fully load — it first shows "Select Rate"
-      // (with a spinner), then after AJAX loads it shows "Select Number of Golfers"
       try {
         await this.page.waitForFunction(() => {
           return document.body.innerText.includes('Select Number of Golfers');
@@ -790,11 +715,8 @@ class SiteAutomation {
       }
       await this.screenshot(`slot-${slotIndex}-after-click`);
 
-      // Step 1: Select golfer count in the modal
-      // Strategy: Find the "Select Number of Golfers" heading, then look for
-      // numbered clickable elements (1-4) in the same parent container.
       const golferResult = await this.page.evaluate((desiredCount) => {
-        // Find the heading/label that says "Select Number of Golfers"
+
         const allEls = document.querySelectorAll('*');
         let golferSection = null;
         for (const el of allEls) {
@@ -816,20 +738,15 @@ class SiteAutomation {
           return { error: 'Could not find "Select Number of Golfers" heading', selectedCount: 0 };
         }
 
-        // From the heading, walk UP to find the container with golfer count controls.
-        // TeeItUp uses MUI Radio buttons — SPAN.MuiRadio-root elements inside a
-        // [role="radiogroup"] div. Each radio has a sibling DIV.MuiBox-root label
-        // showing "1", "2", "3", "4". There are NO <label> or <button> wrappers.
         const golferBtns = {};
         let container = golferSection.parentElement;
         for (let depth = 0; depth < 6 && container; depth++, container = container.parentElement) {
           const radioGroup = container.querySelector('[role="radiogroup"]');
           if (radioGroup) {
-            // Scan ALL descendants for elements whose text is exactly a single digit 1-4.
-            // Prefer MuiButtonBase-root/MuiRadio-root spans (the clickable radio controls).
+
             const allDescendants = radioGroup.querySelectorAll('*');
             for (const el of allDescendants) {
-              // Only match leaf-ish elements (those with 0-2 children to avoid containers)
+
               if (el.children.length > 2) continue;
               const text = el.textContent.trim();
               if (text.length > 3) continue;
@@ -840,7 +757,7 @@ class SiteAutomation {
                 const isDisabled = el.classList.contains('Mui-disabled') ||
                   (el.closest && el.closest('.Mui-disabled') !== null) ||
                   parseFloat(getComputedStyle(el).opacity) < 0.4;
-                // Prefer clickable MuiRadio-root spans over label divs
+
                 if (!golferBtns[num] || isMuiRadio) {
                   golferBtns[num] = { el, disabled: isDisabled };
                 }
@@ -848,7 +765,7 @@ class SiteAutomation {
             }
             if (Object.keys(golferBtns).length >= 2) break;
           }
-          // Fallback: regular buttons or role=button
+
           const buttons = container.querySelectorAll('button, [role="button"]');
           for (const el of buttons) {
             const text = el.textContent.trim().replace(/[\s\u200b\u00a0]+/g, '');
@@ -863,7 +780,6 @@ class SiteAutomation {
           if (Object.keys(golferBtns).length >= 2) break;
         }
 
-        // Debug: if no buttons found, log what elements exist near the heading
         if (Object.keys(golferBtns).length === 0) {
           let debugContainer = golferSection.parentElement;
           const debugInfo = [];
@@ -889,24 +805,17 @@ class SiteAutomation {
           };
         }
 
-        // Try 4 players only — never book fewer than 4
         const preferenceOrder = [4];
         for (const count of preferenceOrder) {
           if (golferBtns[count] && !golferBtns[count].disabled) {
             const btn = golferBtns[count].el;
 
-            // Dispatch a properly bubbling click so React's top-level event
-            // delegation (React 17+ root delegation) catches it.  A raw
-            // el.click() does NOT bubble through React's synthetic event
-            // system for MUI RadioGroup — the actual state update is driven
-            // by the <input type="radio"> onChange event inside the button.
             const fireReactClick = (target) => {
-              // Try to find a child <input type="radio"> — that is what React
-              // listens to via onChange on the RadioGroup.
+
               const radioInput = target.querySelector('input[type="radio"]') ||
                 (target.tagName === 'INPUT' && target.type === 'radio' ? target : null);
               if (radioInput) {
-                // Simulate user interaction: focus → mousedown → mouseup → click → change
+
                 radioInput.focus();
                 radioInput.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
                 radioInput.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
@@ -914,7 +823,7 @@ class SiteAutomation {
                 radioInput.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
                 return true;
               }
-              // No child radio input — fire on the button itself with bubbling
+
               target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
               target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
               target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
@@ -925,7 +834,7 @@ class SiteAutomation {
             return { selectedCount: count, found: Object.keys(golferBtns).map(Number), usedRadioInput };
           }
         }
-        // Nothing available
+
         const availableCounts = Object.entries(golferBtns)
           .filter(([, v]) => !v.disabled)
           .map(([k]) => Number(k));
@@ -937,7 +846,6 @@ class SiteAutomation {
         };
       }, 4);
 
-      // If no golfer count could be selected, skip this tee time.
       if (golferResult.error || golferResult.selectedCount !== 4) {
         const avail = golferResult.availableCounts || [];
         logger.warn(
@@ -958,14 +866,8 @@ class SiteAutomation {
 
       logger.info(`Selected ${golferResult.selectedCount} golfers in modal (buttons found: ${golferResult.found}, usedRadioInput: ${golferResult.usedRadioInput})`);
 
-      // Wait for React to process the golfer selection
       await this.page.waitForTimeout(1500);
 
-      // Verify the selection actually registered — read back the checked state.
-      // MUI RadioGroup marks the selected radio input as checked. If the state
-      // didn't update (React ignored the event), retry using Playwright's native
-      // click which synthesizes full pointer events and works even when React
-      // event delegation misses the in-page dispatchEvent call.
       const verifyResult = await this.page.evaluate(() => {
         const allEls = document.querySelectorAll('*');
         let golferSection = null;
@@ -984,13 +886,13 @@ class SiteAutomation {
           if (radioGroup) {
             const checkedInput = radioGroup.querySelector('input[type="radio"]:checked');
             if (checkedInput) {
-              // Read the value or sibling label text to determine which count is selected
+
               const val = parseInt(checkedInput.value, 10);
               const labelText = checkedInput.closest('label') ?
                 checkedInput.closest('label').textContent.trim() : null;
               return { verified: true, selectedValue: val || null, labelText };
             }
-            // Also check aria-checked on MUI radio spans
+
             const ariaChecked = radioGroup.querySelector('[aria-checked="true"]');
             if (ariaChecked) {
               const text = ariaChecked.textContent.trim();
@@ -1005,12 +907,10 @@ class SiteAutomation {
 
       logger.info(`Player count verification: ${JSON.stringify(verifyResult)}`);
 
-      // If React state did not update, try Playwright's native click on the 4-player option.
       if (!verifyResult.verified || verifyResult.selectedValue !== 4) {
         logger.warn(`Player count not confirmed as 4 after in-page dispatchEvent — retrying with Playwright native click`);
         try {
-          // Use Playwright locator to find and click the radio input for "4"
-          // Try to find by value attribute or label text
+
           let clicked = false;
           const radioInputs = await this.page.locator('[role="radiogroup"] input[type="radio"]').all();
           for (const inp of radioInputs) {
@@ -1028,7 +928,7 @@ class SiteAutomation {
             }
           }
           if (!clicked) {
-            // Fallback: find any element in radiogroup whose visible text is "4" and click it
+
             const fourLocator = this.page.locator('[role="radiogroup"]').locator('text="4"').first();
             await fourLocator.click({ force: true });
             logger.info('Playwright native click on "4" text within radiogroup succeeded');
@@ -1041,16 +941,14 @@ class SiteAutomation {
 
       await this.screenshot(`slot-${slotIndex}-players-set`);
 
-      // Step 2: Click "ADD TO CART" button
       let addedToCart = false;
       const addResult = await this.page.evaluate(() => {
         const buttons = document.querySelectorAll('button');
         for (const btn of buttons) {
-          if (btn.offsetParent === null) continue; // skip hidden
+          if (btn.offsetParent === null) continue;
           const text = btn.textContent.trim().replace(/[\s\u200b]+/g, ' ').toUpperCase();
           if (text === 'ADD TO CART') {
-            // Use a bubbling MouseEvent so React's synthetic event system
-            // processes the click (matches how a real user interaction fires).
+
             btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
             return { found: true, text: btn.textContent.trim() };
           }
@@ -1071,7 +969,6 @@ class SiteAutomation {
         return { success: false, error: 'ADD TO CART button not found', screenshotPath };
       }
 
-      // Check for "Cart items limit exceeded" error toast
       const cartError = await this.page.evaluate(() => {
         const text = document.body.innerText;
         if (/cart items limit exceeded/i.test(text) || /cart.*limit/i.test(text) || /cart.*full/i.test(text)) {
@@ -1096,18 +993,12 @@ class SiteAutomation {
     }
   }
 
-  /**
-   * Set the player count in the booking modal. Tries the requested count first,
-   * then falls back to lower counts if the button is disabled (e.g. limited spots).
-   * Returns the actual count selected.
-   */
   async _setPlayerCount(count) {
-    // TeeItUp uses numbered buttons (1, 2, 3, 4) under "Select Number of Golfers"
-    // Strategy: Find the heading first, then locate buttons in its container
+
     const modalButtons = new Map();
 
     const buttonInfos = await this.page.evaluate(() => {
-      // Find the "Select Number of Golfers" heading
+
       const allEls = document.querySelectorAll('*');
       let golferSection = null;
       for (const el of allEls) {
@@ -1120,7 +1011,6 @@ class SiteAutomation {
       }
       if (!golferSection) return [];
 
-      // Walk up from heading to find container with buttons
       let container = golferSection.parentElement;
       const results = [];
       for (let depth = 0; depth < 4 && container; depth++, container = container.parentElement) {
@@ -1141,7 +1031,6 @@ class SiteAutomation {
       return results;
     });
 
-    // Now get Playwright handles for the buttons
     const allButtons = await this.page.$$('button');
     const handledNums = new Set();
     for (const btn of allButtons) {
@@ -1152,7 +1041,7 @@ class SiteAutomation {
         return null;
       }).catch(() => null);
       if (info !== null && buttonInfos.some(bi => bi.num === info) && !handledNums.has(info)) {
-        // Verify this is the same button by checking it's near "Select Number of Golfers"
+
         const isInSection = await btn.evaluate(el => {
           let node = el.parentElement;
           for (let i = 0; i < 8 && node; i++, node = node.parentElement) {
@@ -1176,7 +1065,6 @@ class SiteAutomation {
       return count;
     }
 
-    // Try requested count, then fall back to lower counts (minimum 2 — never book 1-player slots)
     const tryOrder = [];
     for (let n = count; n >= 2; n--) tryOrder.push(n);
 
@@ -1201,17 +1089,14 @@ class SiteAutomation {
   }
 
   async _extractConfirmation() {
-    // The confirmation page at /confirmation shows "Reservation #XXXXXXXXX"
-    // Extract that reservation number
+
     try {
       const confirmation = await this.page.evaluate(() => {
         const text = document.body.innerText;
 
-        // Primary: "Reservation #418929401" format (the TeeItUp confirmation page)
         const resMatch = text.match(/Reservation\s*#\s*(\d+)/i);
         if (resMatch) return resMatch[1];
 
-        // Fallback patterns for other confirmation formats
         const patterns = [
           /confirmation\s*(?:#|number|:)\s*([A-Z0-9-]{6,})/i,
           /booking\s*(?:#|number|:)\s*([A-Z0-9-]{6,})/i,
@@ -1236,14 +1121,9 @@ class SiteAutomation {
     return null;
   }
 
-  /**
-   * Clear any stale items from the shopping cart to avoid "Cart items limit exceeded" errors.
-   * Should be called once after login, before processing any booking groups.
-   */
   async clearCart() {
     logger.info('Clearing stale cart items...');
 
-    // Click the cart icon to open the cart panel
     let cartOpened = await this._clickCartIcon();
 
     if (!cartOpened) {
@@ -1253,7 +1133,6 @@ class SiteAutomation {
 
     await this.screenshot('clear-cart-opened');
 
-    // Step 1: Click "EDIT CART" button to enter edit mode (shows delete icons)
     let editCartClicked = false;
     const editCartSelectors = [
       'button:has-text("EDIT CART")',
@@ -1271,7 +1150,7 @@ class SiteAutomation {
           await this.page.waitForTimeout(2000);
           break;
         }
-      } catch { /* try next */ }
+      } catch {                }
     }
 
     if (!editCartClicked) {
@@ -1280,13 +1159,12 @@ class SiteAutomation {
 
     await this.screenshot('clear-cart-edit-mode');
 
-    // Step 2: Click delete/remove/trash icons to remove each item
     let itemsRemoved = 0;
-    const maxItems = 10; // safety limit
+    const maxItems = 10;
 
     for (let attempt = 0; attempt < maxItems; attempt++) {
       const removed = await this.page.evaluate(() => {
-        // Look for delete/trash/remove icons or buttons
+
         const deleteSelectors = [
           '[aria-label*="delete" i]',
           '[aria-label*="remove" i]',
@@ -1310,13 +1188,11 @@ class SiteAutomation {
           }
         }
 
-        // Fallback: look for any small icon button (likely delete) in the cart area
-        // These are typically SVG icons inside buttons with no text
         const buttons = document.querySelectorAll('button');
         for (const btn of buttons) {
           const text = btn.textContent.trim().toUpperCase();
           if ((text === '' || text === 'REMOVE' || text === 'DELETE' || text === '×' || text === 'X') && btn.offsetParent !== null) {
-            // Check if it's in a cart/shopping area
+
             const parent = btn.closest('[class*="cart" i], [class*="Cart" i], [class*="Shopping" i], [class*="drawer" i], [class*="Drawer" i], [class*="panel" i]');
             if (parent) {
               btn.click();
@@ -1329,7 +1205,7 @@ class SiteAutomation {
       });
 
       if (!removed) {
-        // No more delete buttons found
+
         break;
       }
 
@@ -1346,24 +1222,17 @@ class SiteAutomation {
       logger.info('Cart was empty — nothing to clear');
     }
 
-    // Close the cart panel
     await this._dismissModals();
     await this.page.waitForTimeout(500);
   }
 
-  /**
-   * Complete checkout after a tee time has been added to the cart.
-   * Flow: Cart icon (top-right) → Checkout button → Terms checkbox → COMPLETE YOUR PURCHASE
-   */
   async completeCheckout() {
     logger.info('Completing checkout...');
     await this.page.waitForTimeout(2000);
 
-    // Dismiss any open dropdown menus or modals that may block interaction
     await this._dismissModals();
     await this.screenshot('checkout-before-cart');
 
-    // Step 1: Open cart panel and click CHECKOUT
     let navigatedToCheckout = false;
 
     const checkoutBtnSelectors = [
@@ -1375,7 +1244,6 @@ class SiteAutomation {
       'a:has-text("Proceed to Checkout")',
     ];
 
-    // Check if CHECKOUT button is already visible (cart panel may be open after ADD TO CART)
     for (const sel of checkoutBtnSelectors) {
       try {
         const el = await this.page.$(sel);
@@ -1386,16 +1254,15 @@ class SiteAutomation {
           await this.page.waitForTimeout(3000);
           break;
         }
-      } catch { /* try next */ }
+      } catch {                }
     }
 
-    // If CHECKOUT not visible, open the cart panel using _clickCartIcon()
     if (!navigatedToCheckout) {
       const cartOpened = await this._clickCartIcon();
       await this.screenshot('checkout-after-cart-icon');
 
       if (cartOpened) {
-        // Look for CHECKOUT button in the cart panel
+
         for (const sel of checkoutBtnSelectors) {
           try {
             const el = await this.page.$(sel);
@@ -1406,10 +1273,9 @@ class SiteAutomation {
               await this.page.waitForTimeout(3000);
               break;
             }
-          } catch { /* try next */ }
+          } catch {                }
         }
 
-        // If not found, cart click may have closed an already-open panel — try once more
         if (!navigatedToCheckout) {
           logger.warn('CHECKOUT not found after cart click — retrying');
           await this._clickCartIcon();
@@ -1424,7 +1290,7 @@ class SiteAutomation {
                 await this.page.waitForTimeout(3000);
                 break;
               }
-            } catch { /* try next */ }
+            } catch {                }
           }
         }
       }
@@ -1436,7 +1302,6 @@ class SiteAutomation {
       return { success: false, error: 'Could not reach checkout page', screenshotPath: null };
     }
 
-    // Verify we're on the checkout page (not still on tee times)
     await this.page.waitForTimeout(1000);
     const onCheckoutPage = await this.page.evaluate(() => {
       const text = document.body.innerText;
@@ -1451,41 +1316,34 @@ class SiteAutomation {
     logger.info('On checkout page');
     await this.screenshot('checkout-page');
 
-    // Step 3: Check "I agree to the Terms and Conditions" checkbox
-    // Dismiss any dropdowns that may have opened during navigation
     await this._dismissModals();
     await this.page.waitForTimeout(1000);
 
     let termsChecked = false;
 
-    // Strategy 1: Find the specific "I agree" checkbox using targeted search
-    // The checkout page has multiple checkboxes (Transactional SMS, Marketing, Terms).
-    // We need the one specifically labeled "I agree to the Terms and Conditions".
     const termsResult = await this.page.evaluate(() => {
-      // Find all labels/containers that specifically contain "I agree" (not just "terms")
+
       const allElements = document.querySelectorAll('label, span, div, p');
       for (const el of allElements) {
         const text = (el.textContent || '').trim();
-        // Must contain "I agree" — this distinguishes the terms checkbox from the
-        // terms dropdown ("Tee Times Terms and Conditions for Fort Walton Beach...")
+
         if (!/i agree/i.test(text) || text.length > 200) continue;
 
-        // Look for a checkbox input within or near this element
         let checkbox = el.querySelector('input[type="checkbox"]');
         if (!checkbox) {
-          // Try the closest label's checkbox
+
           const label = el.closest('label');
           if (label) checkbox = label.querySelector('input[type="checkbox"]');
         }
         if (!checkbox) {
-          // Try sibling or parent containers
+
           const parent = el.parentElement;
           if (parent) checkbox = parent.querySelector('input[type="checkbox"]');
         }
 
         if (checkbox) {
           if (!checkbox.checked) {
-            // Click the checkbox and dispatch events for React state updates
+
             checkbox.click();
             checkbox.dispatchEvent(new Event('change', { bubbles: true }));
             checkbox.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1493,22 +1351,19 @@ class SiteAutomation {
           return { method: 'checkbox-near-i-agree', checked: checkbox.checked };
         }
 
-        // If element is a label, clicking it should toggle its associated checkbox
         if (el.tagName === 'LABEL' || el.closest('label')) {
           const labelEl = el.tagName === 'LABEL' ? el : el.closest('label');
           labelEl.click();
-          // Re-check if a checkbox got toggled
+
           const cb = labelEl.querySelector('input[type="checkbox"]');
           return { method: 'clicked-i-agree-label', checked: cb ? cb.checked : 'unknown' };
         }
       }
 
-      // Strategy 2: Find the LAST unchecked checkbox on the page — on the checkout page,
-      // the Terms checkbox is typically the last one after transactional/marketing checkboxes
       const checkboxes = [...document.querySelectorAll('input[type="checkbox"]')];
       const unchecked = checkboxes.filter(cb => !cb.checked);
       if (unchecked.length > 0) {
-        // Take the last unchecked checkbox (Terms is at the bottom of the form)
+
         const lastUnchecked = unchecked[unchecked.length - 1];
         lastUnchecked.click();
         lastUnchecked.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1516,7 +1371,6 @@ class SiteAutomation {
         return { method: 'last-unchecked-checkbox', checked: lastUnchecked.checked };
       }
 
-      // All checkboxes already checked
       const allChecked = checkboxes.every(cb => cb.checked);
       if (checkboxes.length > 0 && allChecked) {
         return { method: 'all-already-checked', checked: true };
@@ -1530,11 +1384,10 @@ class SiteAutomation {
       termsChecked = termsResult.checked === true || termsResult.checked === 'unknown';
       await this.page.waitForTimeout(1000);
 
-      // Verify the terms checkbox is actually checked
       if (!termsChecked) {
         logger.warn('Terms checkbox click did not register — trying Playwright locator approach');
         try {
-          // Try using Playwright's locator to find and check the terms checkbox
+
           const agreeLocator = this.page.locator('text=I agree to the Terms').locator('xpath=ancestor::label[1]//input[@type="checkbox"]');
           if (await agreeLocator.count() > 0) {
             await agreeLocator.first().check({ force: true });
@@ -1549,12 +1402,9 @@ class SiteAutomation {
       logger.warn('Could not find Terms and Conditions checkbox');
     }
 
-    // Wait for React to process the checkbox state change
     await this.page.waitForTimeout(2000);
     await this.screenshot('checkout-terms');
 
-    // Step 4: Click "COMPLETE YOUR PURCHASE" button
-    // First, log all visible buttons on the page for debugging
     const visibleButtons = await this.page.evaluate(() => {
       const buttons = document.querySelectorAll('button, input[type="submit"], a.btn, a.button');
       return [...buttons].filter(b => b.offsetParent !== null).map(b => {
@@ -1581,7 +1431,7 @@ class SiteAutomation {
         'RESERVE',
       ];
       for (const btn of buttons) {
-        if (btn.offsetParent === null) continue; // skip hidden buttons
+        if (btn.offsetParent === null) continue;
         const clone = btn.cloneNode(true);
         clone.querySelectorAll('svg, [aria-hidden="true"], [class*="Icon"]').forEach(n => n.remove());
         const text = clone.textContent.trim().toUpperCase();
@@ -1603,13 +1453,9 @@ class SiteAutomation {
     if (purchaseResult && !purchaseResult.disabled) {
       logger.info(`Clicked purchase button: "${purchaseResult.text}"`);
 
-      // After clicking "Complete your purchase", the site redirects to:
-      // https://fort-walton-member.book.teeitup.golf/confirmation
-      // That page shows "Reservation #XXXXXXXXX"
       let purchaseSucceeded = false;
       let confirmationUrl = null;
 
-      // Wait for redirect to /confirmation page (up to 20 seconds)
       for (let wait = 0; wait < 7; wait++) {
         await this.page.waitForTimeout(3000);
         const currentUrl = this.page.url();
@@ -1621,7 +1467,7 @@ class SiteAutomation {
         }
         if (currentUrl !== urlBeforePurchase) {
           logger.info(`Page navigated to: ${currentUrl}`);
-          // Check if this is a success page even if URL is different
+
           const hasConfirmation = await this.page.evaluate(() => {
             const text = document.body.innerText;
             return /reservation\s*#/i.test(text) || /confirmation/i.test(text);
@@ -1640,11 +1486,9 @@ class SiteAutomation {
         return { success: false, error: 'Checkout did not redirect to confirmation page (terms may not be checked)', screenshotPath: null };
       }
 
-      // We're on the confirmation page — wait for it to fully load
       await this.page.waitForTimeout(2000);
       const screenshotPath = await this.screenshot('checkout-confirmation');
 
-      // Extract Reservation # from the confirmation page
       const confirmation = await this._extractConfirmation();
       logger.info(`Reservation confirmed! Number: ${confirmation || 'unknown'}`);
 
@@ -1664,19 +1508,12 @@ class SiteAutomation {
     }
   }
 
-  /**
-   * Check existing reservations on the site for a given date.
-   * Navigates to the reservations/my-tee-times page, extracts bookings
-   * matching the target date, and returns them.
-   * Returns array of { time, course, players, date }
-   */
   async getExistingReservations(date) {
     logger.info(`Checking existing reservations for ${date}...`);
 
     const baseUrl = config.site.memberUrl;
     let foundPage = false;
 
-    // Try clicking nav links in the header
     const navLabels = ['Reservations', 'My Tee Times', 'My Bookings', 'Upcoming', 'My Reservations'];
     for (const label of navLabels) {
       try {
@@ -1684,7 +1521,7 @@ class SiteAutomation {
         if (link && await link.isVisible()) {
           await link.click();
           await this.page.waitForTimeout(3000);
-          // Verify we didn't land on a "PAGE NOT FOUND" page
+
           const pageText = await this.page.evaluate(() => document.body.innerText.slice(0, 2000));
           if (/page not found|404|not found/i.test(pageText)) {
             logger.warn(`"${label}" nav link led to a 404 page — trying next`);
@@ -1695,13 +1532,12 @@ class SiteAutomation {
           break;
         }
       } catch {
-        // Try next
+
       }
     }
 
-    // Try user dropdown menu items (Account, Dashboard, Tee Time Alerts)
     if (!foundPage) {
-      // Open user menu by clicking on the user name/icon area
+
       const userMenuSelectors = [
         '[class*="user"] button', '[class*="User"] button',
         'header button:has-text("Visanu")', 'header a:has-text("Visanu")',
@@ -1717,10 +1553,9 @@ class SiteAutomation {
             logger.info(`Opened user menu via: ${sel}`);
             break;
           }
-        } catch { /* try next */ }
+        } catch {                }
       }
 
-      // Also try clicking the user name text directly
       try {
         const userNameEl = await this.page.evaluate(() => {
           const els = document.querySelectorAll('header span, header a, header button, header p');
@@ -1740,9 +1575,8 @@ class SiteAutomation {
           logger.info(`Clicked user name: "${userNameEl}"`);
           await this.page.waitForTimeout(1500);
         }
-      } catch { /* ignore */ }
+      } catch {              }
 
-      // Now look for menu items
       const menuLabels = ['Dashboard', 'Tee Time Alerts', 'Account', 'My Reservations', 'My Bookings'];
       for (const label of menuLabels) {
         try {
@@ -1755,7 +1589,7 @@ class SiteAutomation {
               logger.warn(`"${label}" menu item led to a 404 — trying next`);
               continue;
             }
-            // Verify we're not still on the checkout page
+
             if (this.page.url().includes('/checkout')) {
               logger.warn(`"${label}" menu item stayed on /checkout — trying next`);
               continue;
@@ -1765,12 +1599,11 @@ class SiteAutomation {
             break;
           }
         } catch {
-          // Try next
+
         }
       }
     }
 
-    // Fallback: try direct URL patterns
     if (!foundPage) {
       const urlPatterns = [
         `${baseUrl}/my-tee-times`,
@@ -1792,7 +1625,7 @@ class SiteAutomation {
             }
           }
         } catch {
-          // Try next URL
+
         }
       }
     }
@@ -1804,10 +1637,9 @@ class SiteAutomation {
 
     await this.screenshot('reservations-page');
 
-    // Increase page length to 50 so we see more reservations per page
     try {
       await this.page.evaluate(() => {
-        // Find the Page Length select/dropdown and change it to 50
+
         const selects = document.querySelectorAll('select');
         for (const sel of selects) {
           for (const opt of sel.options) {
@@ -1821,9 +1653,8 @@ class SiteAutomation {
         return false;
       });
       await this.page.waitForTimeout(1500);
-    } catch { /* dropdown may not support 50 */ }
+    } catch {                                   }
 
-    // Build date patterns once (passed into page context as plain array)
     const [resYear, resMonth, resDay] = date.split('-').map(Number);
     const _monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
                          'July', 'August', 'September', 'October', 'November', 'December'];
@@ -1839,8 +1670,6 @@ class SiteAutomation {
       `${_shortMonths[resMonth-1]} ${String(resDay).padStart(2,'0')}`,
     ];
 
-    // Extract reservation details from the current page.
-    // Works on the list page (card selectors) and the detail page (full-body scan fallback).
     const extractFromCurrentPage = async () => {
       return await this.page.evaluate(({ targetDate, patterns }) => {
         const results = [];
@@ -1863,13 +1692,12 @@ class SiteAutomation {
           else if (/oaks/i.test(text)) course = 'Oaks';
           const playerMatch = text.match(/(\d)\s*(?:player|golfer)/i);
           const players = playerMatch ? parseInt(playerMatch[1]) : 4;
-          // Match "Confirmation #Name|NUMBER" or "Reservation #NUMBER"
+
           const resMatch = text.match(/(?:Confirmation|Reservation)\s*#\s*(?:[^|\n]+\|)?(\d+)/i);
           const reservationNumber = resMatch ? resMatch[1] : null;
           results.push({ time: time24, course, players, date: targetDate, reservationNumber });
         }
 
-        // Scan card-like elements (list page)
         const selectors = [
           '[role="dialog"]', '[class*="modal" i]',
           '[class*="card" i]', '[class*="reservation" i]', '[class*="booking" i]',
@@ -1884,7 +1712,6 @@ class SiteAutomation {
           }
         }
 
-        // Fallback: full body scan (for detail page after VIEW DETAILS navigation)
         if (results.length === 0) {
           const bodyText = document.body.innerText || '';
           if (patterns.some(p => bodyText.includes(p))) {
@@ -1892,7 +1719,6 @@ class SiteAutomation {
           }
         }
 
-        // Deduplicate by time+course
         const deduped = new Set();
         return results.filter(r => {
           const k = `${r.time}-${r.course}`;
@@ -1903,13 +1729,12 @@ class SiteAutomation {
       }, { targetDate: date, patterns: datePatterns });
     };
 
-    // Wait for reservation cards to finish loading (not just the page chrome/spinner)
     try {
       await this.page.waitForFunction(
         () => /VIEW DETAILS|View Details/i.test(document.body.innerText || ''),
         { timeout: 12000, polling: 300 }
       );
-    } catch { /* might be empty list or different page structure */ }
+    } catch {                                                       }
     await this.page.waitForTimeout(300);
 
     const MAX_PAGES = 20;
@@ -1917,7 +1742,7 @@ class SiteAutomation {
     let lastPageHadDate = false;
 
     for (let pageNum = 0; pageNum < MAX_PAGES; pageNum++) {
-      // Check if the target date is visible anywhere on this page (collapsed cards)
+
       const dateOnPage = await this.page.evaluate(
         (patterns) => patterns.some(p => (document.body.innerText || '').includes(p)),
         datePatterns
@@ -1927,9 +1752,6 @@ class SiteAutomation {
         lastPageHadDate = true;
         logger.info(`Page ${pageNum + 1}: found date ${date} — processing matching cards`);
 
-        // Process each matching card one at a time using a skip counter.
-        // Each VIEW DETAILS click navigates to a detail page (SPA), so we
-        // can only click one at a time, go back, then click the next one.
         let processed = 0;
         while (true) {
           const clicked = await this.page.evaluate(({ patterns, skip }) => {
@@ -1975,28 +1797,27 @@ class SiteAutomation {
                 () => /VIEW DETAILS/i.test(document.body.innerText || ''),
                 { timeout: 8000, polling: 300 }
               );
-            } catch { /* list may be empty */ }
+            } catch {                         }
           }
         }
       } else if (lastPageHadDate) {
-        // We've advanced past the target date — all cards collected
+
         break;
       }
 
-      // Advance to next page
       const advanced = await this._tryAdvanceReservationsPage();
       if (!advanced) {
         logger.debug(`No more reservation pages after page ${pageNum + 1}`);
         break;
       }
       logger.info(`Advancing to reservation page ${pageNum + 2}...`);
-      // Wait for new page cards to render
+
       try {
         await this.page.waitForFunction(
           () => /VIEW DETAILS|View Details/i.test(document.body.innerText || ''),
           { timeout: 8000, polling: 300 }
         );
-      } catch { /* last/empty page */ }
+      } catch {                       }
       await this.page.waitForTimeout(300);
     }
 
@@ -2010,13 +1831,6 @@ class SiteAutomation {
     return reservations;
   }
 
-  /**
-   * Verify that a specific booking exists on the Reservations page.
-   * Called after checkout to confirm the booking actually went through.
-   * @param {string} date - YYYY-MM-DD
-   * @param {string} time - 24h format HH:MM (±15 min tolerance)
-   * @returns {{ verified: boolean, reservations: Array }}
-   */
   async verifyBookingOnSite(date, time) {
     logger.info(`Verifying booking on Reservations page: ${date} ${time}...`);
 
@@ -2029,7 +1843,6 @@ class SiteAutomation {
         return { verified: false, reservations };
       }
 
-      // Check if any reservation matches the booked time (±15 min)
       const bookedMinutes = this._timeToMinutes(time);
       const match = reservations.find(r => {
         const resMinutes = this._timeToMinutes(r.time);
@@ -2050,12 +1863,6 @@ class SiteAutomation {
     }
   }
 
-  /**
-   * Try to advance to the next page of reservations.
-   * Handles "Load More" buttons, standard pagination Next buttons,
-   * and infinite-scroll (detects page height growth after scrolling).
-   * Returns true if the page content likely changed, false if exhausted.
-   */
   async _tryAdvanceReservationsPage() {
     const nextSelectors = [
       'button:has-text("NEXT")',
@@ -2087,10 +1894,9 @@ class SiteAutomation {
         await this.page.waitForTimeout(2000);
         logger.debug(`Advanced reservations page via: ${sel}`);
         return true;
-      } catch { /* try next selector */ }
+      } catch {                         }
     }
 
-    // Infinite scroll fallback: scroll to bottom and check if page grew
     const prevHeight = await this.page.evaluate(() => document.body.scrollHeight);
     await this.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await this.page.waitForTimeout(1500);
@@ -2111,8 +1917,6 @@ class SiteAutomation {
   async _handleCheckout(slotIndex) {
     logger.info('Handling checkout flow...');
 
-    // Some booking systems have a cart → checkout flow
-    // Look for checkout/confirm buttons
     const checkoutSelectors = [
       'button:has-text("Checkout")',
       'button:has-text("Complete")',
@@ -2141,7 +1945,7 @@ class SiteAutomation {
           };
         }
       } catch {
-        // Try next
+
       }
     }
 
@@ -2149,16 +1953,12 @@ class SiteAutomation {
     return { success: false, error: 'No checkout button found', screenshotPath };
   }
 
-  /**
-   * Navigate to the reservation history page.
-   */
   async navigateToReservationHistory() {
     const url = `${config.site.memberUrl}/reservation/history`;
     logger.info(`Navigating to reservation history: ${url}`);
     await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await this.page.waitForTimeout(3000);
 
-    // Verify we landed on the history page (not redirected to login or 404)
     const pageUrl = this.page.url();
     const pageText = await this.page.evaluate(() => document.body.innerText.slice(0, 2000));
 
@@ -2178,17 +1978,16 @@ class SiteAutomation {
             logger.info(`Found reservation page at: ${alt}`);
             return true;
           }
-        } catch { /* try next */ }
+        } catch {                }
       }
       throw new Error('Could not find reservation history page');
     }
 
     logger.info(`On reservation history page: ${pageUrl}`);
 
-    // Wait for the loading spinner to disappear and reservations to load
     try {
       await this.page.waitForFunction(() => {
-        // Check that loading spinner is gone and some content appeared
+
         const spinners = document.querySelectorAll('[class*="CircularProgress"], [class*="spinner"], [role="progressbar"]');
         const visibleSpinner = Array.from(spinners).some(s => s.offsetParent !== null);
         return !visibleSpinner;
@@ -2199,20 +1998,17 @@ class SiteAutomation {
     }
     await this.page.waitForTimeout(2000);
 
-    // Increase "Page Length" to show all reservations
     try {
-      // The MUI NativeSelect renders as a <select> inside a wrapper, OR
-      // as a clickable div. Try multiple approaches.
+
       let pageLengthChanged = false;
 
-      // Approach 1: Click the MUI Select area near "Page Length" text via Playwright
       try {
-        // The select might be rendered as native <select> inside MUI wrapper
+
         const selectEl = await this.page.$('select');
         if (selectEl) {
           const options = await selectEl.evaluate(sel => Array.from(sel.options).map(o => ({ value: o.value, text: o.text })));
           logger.info(`Found native select with options: ${options.map(o => o.text).join(', ')}`);
-          // Pick highest value
+
           const sorted = options.filter(o => !isNaN(parseInt(o.value))).sort((a, b) => parseInt(b.value) - parseInt(a.value));
           if (sorted.length > 0) {
             await selectEl.selectOption(sorted[0].value);
@@ -2224,7 +2020,6 @@ class SiteAutomation {
         logger.debug(`Native select approach failed: ${e.message}`);
       }
 
-      // Approach 2: Click the element showing "5" near "Page Length" and pick from dropdown
       if (!pageLengthChanged) {
         try {
           const clicked = await this.page.evaluate(() => {
@@ -2233,10 +2028,10 @@ class SiteAutomation {
               const text = el.textContent.trim();
               if (text.length > 50) continue;
               if (/^page\s*length$/i.test(text)) {
-                // Found the label — look for a clickable sibling/adjacent element
+
                 const parent = el.parentElement;
                 if (!parent) continue;
-                // Try all children and siblings
+
                 for (const child of parent.querySelectorAll('*')) {
                   const ct = child.textContent.trim();
                   if (/^\d+$/.test(ct) && parseInt(ct) <= 50) {
@@ -2255,7 +2050,7 @@ class SiteAutomation {
           if (clicked) {
             logger.info(`Opened page length dropdown via: ${clicked}`);
             await this.page.waitForTimeout(1000);
-            // Select highest option
+
             const selected = await this.page.evaluate(() => {
               const items = document.querySelectorAll('[role="option"], [role="listbox"] li, ul[role="listbox"] li, [class*="MuiMenuItem"]');
               if (items.length === 0) return null;
@@ -2277,7 +2072,6 @@ class SiteAutomation {
         }
       }
 
-      // Approach 3: Just click NEXT repeatedly to load all pages
       if (!pageLengthChanged) {
         logger.info('Could not increase page length — will paginate with NEXT button');
       } else {
@@ -2291,12 +2085,6 @@ class SiteAutomation {
     return true;
   }
 
-  /**
-   * Cancel reservations by navigating directly to the cancel URL.
-   * URL pattern: {memberUrl}/reservation/history/{confirmationNumber}/cancel
-   * @param {Array} bookings - Array of booking objects with confirmation_number
-   * @returns {{ cancelled: number, failed: number, details: Array }}
-   */
   async cancelReservations(bookings) {
     const results = { cancelled: 0, failed: 0, details: [] };
 
@@ -2309,21 +2097,18 @@ class SiteAutomation {
       logger.info(`Cancelling ${i + 1}/${bookings.length}: ${label}...`);
 
       try {
-        // Navigate directly to the cancel page
+
         const cancelUrl = `${config.site.memberUrl}/reservation/history/${resNum}/cancel`;
         logger.info(`Navigating to: ${cancelUrl}`);
         await this.page.goto(cancelUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        // Wait longer for the SPA to render — far-future reservations can be slower
+
         await this.page.waitForTimeout(5000);
         await this.screenshot(`cancel-page-${i}`);
 
-        // Verify we're on the cancellation page.
-        // The site uses several headings: "Cancellation Request", "Cancel Reservation",
-        // "Cancel Booking", "Cancel Tee Time". Match any of these variants.
         const cancelPagePattern = /cancell?ation\s*request|cancel\s+(reservation|booking|tee\s+time)/i;
         let pageText = await this.page.evaluate(() => document.body.innerText.slice(0, 3000));
         if (!cancelPagePattern.test(pageText)) {
-          // Try waiting a bit more — the SPA may still be loading
+
           await this.page.waitForTimeout(4000);
           pageText = await this.page.evaluate(() => document.body.innerText.slice(0, 3000));
           if (!cancelPagePattern.test(pageText)) {
@@ -2335,7 +2120,6 @@ class SiteAutomation {
           logger.info(`Cancel page loaded after extra wait for ${label}`);
         }
 
-        // Select number of players to cancel (first MUI dropdown — pick highest)
         const playersSelected = await this._selectMuiDropdown(0, 'last');
         if (!playersSelected) {
           logger.warn('Could not select number of players to cancel');
@@ -2346,7 +2130,6 @@ class SiteAutomation {
         logger.info(`Selected players to cancel: "${playersSelected}"`);
         await this.page.waitForTimeout(500);
 
-        // Select reason for cancellation (second MUI dropdown — pick first real option)
         const reasonSelected = await this._selectMuiDropdown(1, 'first');
         if (!reasonSelected) {
           logger.warn('Could not select cancellation reason');
@@ -2359,7 +2142,6 @@ class SiteAutomation {
 
         await this.screenshot(`cancel-form-filled-${i}`);
 
-        // Click "SUBMIT CANCELLATION"
         const submitted = await this.page.evaluate(() => {
           const buttons = document.querySelectorAll('button, [role="button"]');
           for (const btn of buttons) {
@@ -2383,7 +2165,6 @@ class SiteAutomation {
         await this.page.waitForTimeout(5000);
         await this.screenshot(`cancel-result-${i}`);
 
-        // Check result
         const resultText = await this.page.evaluate(() => document.body.innerText.slice(0, 3000));
         const hasError = /error|failed|could not cancel|unable/i.test(resultText) && !/cancel.*success/i.test(resultText);
 
@@ -2407,16 +2188,8 @@ class SiteAutomation {
     return results;
   }
 
-  /**
-   * Select an option from the Nth MUI Select dropdown on the cancel page.
-   * Uses Playwright locators (not page.evaluate) since MUI class selectors
-   * don't work reliably inside evaluate.
-   * @param {number} dropdownIndex - 0-based index of the dropdown on the page
-   * @param {string} pickStrategy - 'last' for highest value, 'first' for first real option
-   * @returns {string|null} Selected option text, or null on failure
-   */
   async _selectMuiDropdown(dropdownIndex, pickStrategy) {
-    // Click the MUI Select trigger using Playwright locators
+
     const selectLocator = this.page.locator('div.MuiSelect-select');
     const count = await selectLocator.count();
 
@@ -2428,7 +2201,6 @@ class SiteAutomation {
     await selectLocator.nth(dropdownIndex).click();
     await this.page.waitForTimeout(1000);
 
-    // Read available options from the dropdown popover
     const optionLocator = this.page.locator('[role="option"], li.MuiMenuItem-root');
     const optionTexts = await optionLocator.allTextContents();
 
@@ -2437,7 +2209,6 @@ class SiteAutomation {
       return null;
     }
 
-    // Pick the option based on strategy
     const targetIdx = pickStrategy === 'last' ? optionTexts.length - 1 : 0;
     await optionLocator.nth(targetIdx).click();
     await this.page.waitForTimeout(500);
@@ -2445,12 +2216,6 @@ class SiteAutomation {
     return optionTexts[targetIdx];
   }
 
-  /**
-   * Extract date/time/course/confirmationNumber from a detail page already loaded
-   * in this.page. Uses body text scan and URL pattern matching.
-   * @param {string|null} fallbackId - Fallback confirmation number when URL has no ID segment.
-   * @returns {{ date: string|null, time: string|null, course: string, confirmationNumber: string|null }}
-   */
   async _extractDetailPage(fallbackId) {
     return this.page.evaluate((fb) => {
       const body = document.body.innerText || '';
@@ -2484,8 +2249,6 @@ class SiteAutomation {
       if (/pines/i.test(body)) course = 'Pines';
       else if (/oaks/i.test(body)) course = 'Oaks';
 
-      // Extract player count from the detail page body.
-      // TeeItUp shows "GOLFERS  N" on the detail page.
       let players = null;
       const playerPatterns = [
         /\bGOLFERS\s+(\d+)\b/,
@@ -2503,12 +2266,6 @@ class SiteAutomation {
     }, fallbackId);
   }
 
-  /**
-   * Scrape ALL reservation cards currently visible on the /reservation/history list page.
-   * Clicks each VIEW DETAILS button, extracts info via _extractDetailPage, then goes back.
-   * Requires an active browser session (call init() and login() first).
-   * @returns {Promise<Array<{ date: string, time: string, course: string, confirmationNumber: string }>>}
-   */
   async scrapeReservationHistory() {
     if (!this.page) {
       throw new Error('scrapeReservationHistory() called before init() — this.page is not initialised');
@@ -2521,7 +2278,6 @@ class SiteAutomation {
     await this.page.goto(`${baseUrl}/reservation/history`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await this.page.waitForTimeout(3000);
 
-    // Scroll to bottom to trigger lazy-loaded cards
     await this.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await this.page.waitForTimeout(1500);
     await this.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -2532,9 +2288,8 @@ class SiteAutomation {
         () => /VIEW DETAILS|View Details/i.test(document.body.innerText || ''),
         { timeout: 10000, polling: 300 }
       );
-    } catch { /* no cards */ }
+    } catch {                }
 
-    // Count cards once before we start clicking
     const cardCount = await this.page.evaluate(() =>
       [...document.querySelectorAll('button')].filter(b => /view details/i.test(b.textContent || '')).length
     ).catch(() => 0);
@@ -2562,7 +2317,6 @@ class SiteAutomation {
         logger.warn(`  Card ${idx + 1}: could not extract (url=${this.page.url()})`);
       }
 
-      // Go back to list page
       await this.page.goBack({ waitUntil: 'domcontentloaded' }).catch(async () => {
         await this.page.goto(`${baseUrl}/reservation/history`, { waitUntil: 'domcontentloaded', timeout: 20000 });
       });
@@ -2572,19 +2326,12 @@ class SiteAutomation {
           () => /VIEW DETAILS/i.test(document.body.innerText || ''),
           { timeout: 8000, polling: 300 }
         );
-      } catch { /* ok */ }
+      } catch {          }
     }
 
     return reservations;
   }
 
-  /**
-   * Navigate directly to a specific reservation detail URL by ID and extract its data.
-   * Returns null if the page is a 404 or the data cannot be parsed.
-   * Requires an active browser session (call init() and login() first).
-   * @param {number|string} id - Numeric reservation ID.
-   * @returns {Promise<{ date: string, time: string, course: string, confirmationNumber: string }|null>}
-   */
   async fetchReservationById(id) {
     if (!this.page) {
       throw new Error('fetchReservationById() called before init() — this.page is not initialised');
@@ -2596,10 +2343,9 @@ class SiteAutomation {
       await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
       await this.page.waitForTimeout(1500);
 
-      // Check for 404 / page not found
       const bodyText = await this.page.evaluate(() => document.body.innerText || '');
       if (/page not found|404|not found/i.test(bodyText.slice(0, 500))) return null;
-      if (!bodyText.includes(':')) return null; // too short / wrong page
+      if (!bodyText.includes(':')) return null;
 
       const res = await this._extractDetailPage(String(id));
       return (res.date && res.time) ? res : null;

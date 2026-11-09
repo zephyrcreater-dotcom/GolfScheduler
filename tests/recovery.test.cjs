@@ -56,7 +56,7 @@ test('pending cart defers retry without spending its budget or repeating alerts'
 });
 test('legacy uncertain records receive only one extra attempt and blocked history never retries', async () => {
   const f = fixture({ attempts: undefined });
-  // Remove the counter to model an old deployed state record.
+
   const store = f.options.store;
   const state = await store.load(); delete state[date].attemptCount; await store.save(null, state);
   await recoverDate(date, f.options); assert.equal(f.state().attemptCount, 2);

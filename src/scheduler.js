@@ -7,10 +7,6 @@ const { resolveAlternatingCourse } = require('./config');
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-/**
- * Compute all booking slots needed for the next N days.
- * Returns flat array of { date, dayLabel, targetTime, course, slotIndex, players }
- */
 function computeBookingSlots() {
   const now = dayjs().tz(config.timezone);
   const slots = [];
@@ -27,7 +23,6 @@ function computeBookingSlots() {
 
       const dateStr = date.format('YYYY-MM-DD');
 
-      // Assign golfer round-robin per unique booking date
       if (!(dateStr in dateGolferMap)) {
         dateGolferMap[dateStr] = golferCounter % numGolfers;
         golferCounter++;
@@ -35,7 +30,7 @@ function computeBookingSlots() {
       const golferIndex = dateGolferMap[dateStr];
 
       for (let i = 0; i < entry.slots; i++) {
-        // Target time offsets from window start (each slot ~10 min apart)
+
         const [hours, mins] = entry.windowStart.split(':').map(Number);
         const slotTime = dayjs()
           .hour(hours)
@@ -43,8 +38,6 @@ function computeBookingSlots() {
           .second(0)
           .format('HH:mm');
 
-        // Resolve "alternating" sentinel to a concrete course name for this date.
-        // even ISO week → Pines, odd ISO week → Oaks (see resolveAlternatingCourse in config.js)
         const course = entry.preferredCourse === 'alternating'
           ? resolveAlternatingCourse(dateStr)
           : (entry.preferredCourse || 'Pines');
@@ -57,7 +50,7 @@ function computeBookingSlots() {
           windowEnd: entry.windowEnd,
           course,
           slotIndex: i,
-          players: 4, // always 4 per slot
+          players: 4,
           golferIndex,
         });
       }
@@ -67,9 +60,6 @@ function computeBookingSlots() {
   return slots;
 }
 
-/**
- * Group pending bookings by date + target time block for batch processing.
- */
 function groupByDateAndTime(bookings) {
   const groups = {};
   for (const b of bookings) {
@@ -79,7 +69,7 @@ function groupByDateAndTime(bookings) {
     }
     groups[key].slots.push(b);
   }
-  // Sort slots within each group
+
   for (const g of Object.values(groups)) {
     g.slots.sort((a, b) => a.slot_index - b.slot_index);
   }

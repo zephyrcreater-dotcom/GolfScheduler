@@ -1,15 +1,4 @@
 #!/usr/bin/env node
-/**
- * cancel-one-v2.js
- *
- * Cancels reservation #230352 (Sunday March 15, 11:20 AM, Pines, 1 golfer)
- * by navigating to the reservations history page, finding the card, and
- * using the UI to cancel it.
- *
- * The direct /reservation/history/230352/cancel URL doesn't work (redirects
- * to list) — so we find the reservation card by pagination and use the site
- * UI to cancel it.
- */
 
 const SiteAutomation = require('./src/site');
 const config         = require('./src/config');
@@ -28,7 +17,6 @@ async function main() {
 
     const baseUrl = config.site.memberUrl;
 
-    // Navigate to reservation history
     logger.info('Navigating to reservation history...');
     await site.page.goto(`${baseUrl}/reservation/history`, {
       waitUntil: 'domcontentloaded',
@@ -36,11 +24,10 @@ async function main() {
     });
     await site.page.waitForTimeout(3000);
 
-    // Search through pages to find March 15 card
     logger.info('Searching for March 15 reservation (Res#230352)...');
     let found = false;
     for (let pageNum = 1; pageNum <= 25 && !found; pageNum++) {
-      // Check current page for date mention
+
       const pageText = await site.page.evaluate(() => document.body.innerText || '');
       if (/march\s+15|mar\s+15/i.test(pageText) || /230352/.test(pageText)) {
         logger.info(`Found March 15 content on page ${pageNum}`);
@@ -48,7 +35,6 @@ async function main() {
         break;
       }
 
-      // Try to click NEXT
       const hasNext = await site.page.evaluate(() => {
         const btns = [...document.querySelectorAll('button')];
         const nextBtn = btns.find(b => /^next$/i.test((b.textContent || '').trim()) && !b.disabled);
@@ -66,7 +52,7 @@ async function main() {
 
     if (!found) {
       logger.warn('Could not find March 15 reservation in upcoming list. It may be in Past.');
-      // Try switching to Past view
+
       await site.page.evaluate(() => {
         const toggle = document.querySelector('input[type="checkbox"]') ||
                        document.querySelector('[role="switch"]');
@@ -75,7 +61,6 @@ async function main() {
       await site.page.waitForTimeout(2000);
     }
 
-    // Try to find VIEW DETAILS buttons and look for the right one
     const cardCount = await site.page.evaluate(() =>
       [...document.querySelectorAll('button')]
         .filter(b => /view details/i.test(b.textContent || '')).length
@@ -101,7 +86,6 @@ async function main() {
         logger.info('Found reservation #230352! Page text preview:');
         logger.info(detailText.slice(0, 500));
 
-        // Try to find a Cancel button on this page
         const cancelClicked = await site.page.evaluate(() => {
           const allBtns = [...document.querySelectorAll('button, [role="button"], a')];
           for (const btn of allBtns) {
@@ -121,7 +105,6 @@ async function main() {
           const afterText = await site.page.evaluate(() => document.body.innerText.slice(0, 1000));
           logger.info(`After cancel click: ${afterText.slice(0, 300)}`);
 
-          // Try to find "Submit Cancellation" or confirm button
           const submitClicked = await site.page.evaluate(() => {
             const btns = [...document.querySelectorAll('button, [role="button"]')];
             for (const btn of btns) {
@@ -144,7 +127,6 @@ async function main() {
         break;
       }
 
-      // Go back to list
       await site.page.goBack({ waitUntil: 'domcontentloaded' }).catch(async () => {
         await site.page.goto(`${baseUrl}/reservation/history`, {
           waitUntil: 'domcontentloaded', timeout: 20000,

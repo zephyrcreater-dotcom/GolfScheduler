@@ -1,8 +1,4 @@
-/**
- * get-cert.js — Obtain a trusted Let's Encrypt certificate via DuckDNS DNS challenge.
- * Run once: node get-cert.js
- * Re-run every ~60 days to renew before the 90-day expiry.
- */
+
 
 require('dotenv').config();
 const acme    = require('acme-client');
@@ -46,7 +42,7 @@ function wait(ms) {
 }
 
 async function waitForTxt(name, expected, timeoutMs = 180000) {
-  // Use Google DNS (8.8.8.8) — same resolvers Let's Encrypt tends to use
+
   const resolver = new (require('dns').Resolver)();
   resolver.setServers(['8.8.8.8', '8.8.4.4']);
   const deadline = Date.now() + timeoutMs;
@@ -69,7 +65,6 @@ async function waitForTxt(name, expected, timeoutMs = 180000) {
 async function main() {
   fs.mkdirSync(CERT_DIR, { recursive: true });
 
-  // Reuse or create account key
   let accountKey;
   if (fs.existsSync(ACCOUNT_KEY)) {
     console.log('Using existing account key...');

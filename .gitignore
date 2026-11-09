@@ -6,3 +6,6 @@ screenshots/
 *.log
 golf-scheduler.log
 public/
+
+.DS_Store
+.claude/skills/golf-tee-time/

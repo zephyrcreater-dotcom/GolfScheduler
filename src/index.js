@@ -32,12 +32,11 @@ program
     console.log('\nResults:', JSON.stringify(stats, null, 2));
     if (!opts.dryRun) await generateAndPush();
 
-    // After a real booking run, launch the web calendar view
     if (!opts.dryRun && stats.total > 0) {
       console.log('\nStarting calendar web view...');
       const { startServer } = require('./web');
       const server = await startServer();
-      // Open browser to the calendar
+
       const { exec } = require('child_process');
       const url = 'http://localhost:3009';
       const openCmd = process.platform === 'win32' ? `start ${url}` :
@@ -77,7 +76,7 @@ program
   .command('scheduler')
   .description('Run daily at SCHEDULER_HOUR (default 06:00): sync then book')
   .action(async () => {
-    // Force headless mode for the automated daily job so no browser window pops up.
+
     process.env.HEADLESS = 'true';
 
     const BookingEngine = require('./booking');
@@ -95,29 +94,17 @@ program
     logger.info(`[SCHEDULER] Scheduler mode started — daily job fires at ${String(hour).padStart(2, '0')}:00 ${config.timezone}`);
     logger.info('[SCHEDULER] Press Ctrl+C to stop');
 
-    /**
-     * Returns the number of milliseconds until the next occurrence of `hour:00`
-     * in the configured timezone. Returns 0 if that time has already passed today
-     * (so the job runs immediately on startup).
-     *
-     * @param {number} fireHour  0–23
-     * @returns {number}
-     */
     function msUntilNextFire(fireHour) {
       const now = dayjs().tz(config.timezone);
-      // Target: today at fireHour:00:00
+
       let target = now.startOf('day').add(fireHour, 'hour');
-      // If target is in the past (or right now), move to tomorrow.
+
       if (target.valueOf() <= now.valueOf()) {
         target = target.add(1, 'day');
       }
       return target.valueOf() - now.valueOf();
     }
 
-    /**
-     * Execute one full daily job cycle: sync → book.
-     * Creates a single shared SiteAutomation session for both phases.
-     */
     const runOnce = async () => {
       const startTime = dayjs().tz(config.timezone);
       logger.info(`[SCHEDULER] === Daily job started at ${startTime.format('YYYY-MM-DD HH:mm:ss z')} ===`);
@@ -126,7 +113,6 @@ program
       let syncResult = { checked: 0, updated: 0, warnings: 0, errors: 0 };
       let bookingResult = { total: 0, booked: 0, failed: 0, partial: 0 };
 
-      // ── Phase 1: Sync (primary golfer session) ───────────────────────────
       try {
         await site.init();
         await site.navigateToBooking(
@@ -153,7 +139,6 @@ program
         }
       }
 
-      // ── Phase 2: Book (per-golfer sessions managed by BookingEngine) ─────
       try {
         const engine = new BookingEngine();
         bookingResult = await engine.run();
@@ -170,18 +155,15 @@ program
       const elapsed = Date.now() - startTime.valueOf();
       logger.info(`[SCHEDULER] === Daily job completed in ${elapsed}ms ===`);
 
-      // Schedule the next fire.
       const delay = msUntilNextFire(hour);
       const nextFire = dayjs().tz(config.timezone).add(delay, 'millisecond');
       logger.info(`[SCHEDULER] Next run scheduled for ${nextFire.format('YYYY-MM-DD HH:mm:ss z')} (in ${Math.round(delay / 1000)}s)`);
       setTimeout(runOnce, delay);
     };
 
-    // FR-023: Run immediately if the startup time is past today's fire time;
-    // otherwise wait until the next fire time.
     const initialDelay = msUntilNextFire(hour);
     if (initialDelay === 0 || dayjs().tz(config.timezone).hour() >= hour) {
-      // Past today's fire time — run immediately.
+
       logger.info('[SCHEDULER] Startup is past today\'s fire time — running immediately');
       await runOnce();
     } else {
@@ -207,21 +189,20 @@ program
   .command('cancel <date>')
   .description('Cancel all reservations for a specific date (YYYY-MM-DD)')
   .action(async (date) => {
-    // Accept flexible date formats: YYYY-MM-DD, MM/DD, MM-DD
+
     const db = require('./db');
     const logger = require('./logger');
     const SiteAutomation = require('./site');
     const config = require('./config');
 
-    // Normalize date input
     let normalizedDate = date;
     if (/^\d{1,2}[/-]\d{1,2}$/.test(date)) {
-      // MM/DD or MM-DD — add current year
+
       const [m, d] = date.split(/[/-]/);
       const year = new Date().getFullYear();
       normalizedDate = `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     } else if (/^\d{1,2}[/-]\d{1,2}[/-]\d{4}$/.test(date)) {
-      // MM/DD/YYYY or MM-DD-YYYY
+
       const [m, d, y] = date.split(/[/-]/);
       normalizedDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     }
@@ -231,7 +212,6 @@ program
       process.exit(1);
     }
 
-    // Show what we're about to cancel
     const bookings = await db.getConfirmedByDate(normalizedDate);
     if (bookings.length === 0) {
       console.log(`No confirmed bookings in database for ${normalizedDate}.`);
@@ -251,12 +231,9 @@ program
     try {
       await site.init();
 
-      // Navigate to booking page first to trigger login
       await site.navigateToBooking(config.site.courses.pines.id, normalizedDate);
       await site.login();
 
-      // Cancel reservations using their confirmation numbers
-      // Filter to only bookings with real confirmation numbers (not "access", "EXISTING_RESERVATION", etc.)
       const cancelable = bookings.filter(b => b.confirmation_number && /^\d+$/.test(b.confirmation_number));
       if (cancelable.length === 0) {
         console.log('No bookings with valid confirmation numbers to cancel.');
@@ -276,7 +253,6 @@ program
         console.log(`  ${d.time} ${d.course} — ${status}`);
       }
 
-      // Update DB for successfully cancelled bookings
       if (result.cancelled > 0) {
         let dbUpdated = 0;
         for (const detail of result.details) {

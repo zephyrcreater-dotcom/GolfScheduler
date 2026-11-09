@@ -89,12 +89,12 @@ class DosLagosSite {
       await this.page.keyboard.press('Escape');
       await this.page.waitForTimeout(300);
     } catch {
-      // ignore
+
     }
   }
 
   async _checkForBlocks() {
-    // Wait passively; never interact with or bypass a security challenge.
+
     await waitForAutomaticCheck(this.page);
     const blockSelectors = [
       '.g-recaptcha',
@@ -129,9 +129,6 @@ class DosLagosSite {
     }
   }
 
-  /*
-   * Login to the TeeItUp site.
-   */
   async login({ startAtHistory = config.startAtHistory } = {}) {
     await this.page.goto(startAtHistory ? `${config.site.baseUrl}/reservation/history` : config.site.baseUrl, {
       waitUntil: 'domcontentloaded',
@@ -142,7 +139,7 @@ class DosLagosSite {
       console.log('History entry: waiting up to 30 seconds for normal browser verification.');
       await waitForAutomaticCheck(this.page, 30000);
     }
-    // History may already redirect an unauthenticated visitor to the login form.
+
     if (!new URL(this.page.url()).pathname.includes('/login')) {
       await openLogin(this.page, () => this._checkForBlocks());
     }
@@ -218,17 +215,11 @@ class DosLagosSite {
     }
   }
 
-  /*
-   * Navigate directly to a date's tee times.
-   */
   async searchDate(dateStr, { allowUrlFallback = true } = {}) {
     await searchByCalendar(this.page, dateStr, { ...config.site, allowUrlFallback, checkForBlocks: () => this._checkForBlocks() });
     await this._dismissModals();
   }
 
-  /*
-   * Return all currently available tee times.
-   */
   async getAvailableTimes() {
     const cards = await this.page.evaluate(() => {
       const buttons = Array
@@ -309,12 +300,6 @@ class DosLagosSite {
     return times;
   }
 
-  /*
-   * Fill sandbox payment information.
-   *
-   * This fills the form but DOES NOT click the final
-   * purchase / reservation confirmation button.
-   */
   async fillPaymentForm(card = config.card) {
 
     if (!card) {
@@ -323,10 +308,6 @@ class DosLagosSite {
       );
     }
 
-    /*
-     * Try multiple selectors because the exact field names
-     * may vary between checkout implementations.
-     */
     const fillIfPresent = async (
       selectors,
       value
@@ -350,7 +331,7 @@ class DosLagosSite {
 
             return true;
           } catch {
-            // Try next selector
+
           }
         }
       }
@@ -358,8 +339,6 @@ class DosLagosSite {
       return false;
     };
 
-    // MUI Select controls are divs, not inputs. Open their listbox and
-    // select an option by its value or visible label.
     const selectOption = async (selector, value, kind) => {
       if (!value) return false;
       const control = this.page.locator(selector);
@@ -396,14 +375,8 @@ class DosLagosSite {
 
     const result = {};
 
-    /*
-     * CARD NUMBER
-     */
     result.number = false;
 
-    /*
-     * CARDHOLDER NAME
-     */
     result.name = await fillIfPresent(
       [
         'input[autocomplete="cc-name"]',
@@ -415,19 +388,10 @@ class DosLagosSite {
       card.name
     );
 
-    /*
-     * EXPIRATION MONTH
-     */
     result.expMonth = await selectOption('#cc-exp-month-button', card.expMonth, 'month');
 
-    /*
-     * EXPIRATION YEAR
-     */
     result.expYear = await selectOption('#cc-exp-year-button', card.expYear, 'year');
 
-    /*
-     * SANDBOX CVV
-     */
     result.cvv = await fillIfPresent(
       [
         '#cvv-input',
@@ -442,9 +406,6 @@ class DosLagosSite {
       card.cvv
     );
 
-    /*
-     * BILLING ADDRESS
-     */
     result.address = await fillIfPresent(
       [
         '#billing-address-input',
@@ -455,9 +416,6 @@ class DosLagosSite {
       card.billingAddress
     );
 
-    /*
-     * BILLING ZIP
-     */
     result.postal = await fillIfPresent(
       [
         '#postal-code-input',
@@ -474,8 +432,6 @@ class DosLagosSite {
     await requiredCheckbox.check();
     result.requiredCheckbox = await requiredCheckbox.isChecked();
 
-    // Enter the number last, after dropdown/billing updates have settled.
-    // Both input and blur events publish the final value to the checkout form.
     if (card.number) {
       await enterCardNumber(this.page, card.number);
       result.number = true;
@@ -484,11 +440,6 @@ class DosLagosSite {
     return result;
   }
 
-  /*
-   * Select tee time, choose golfer count, add to cart,
-   * and reach checkout. Payment filling and the final purchase click
-   * are controlled independently by the caller.
-   */
   async reserveAndReachCheckout(
     index,
     golferCount = 1,
@@ -525,9 +476,6 @@ class DosLagosSite {
         el.click();
       });
 
-      /*
-       * Wait for booking modal.
-       */
       try {
         await this.page.waitForSelector(
           '[data-testid="add-to-cart-button"]',
@@ -550,9 +498,6 @@ class DosLagosSite {
         };
       }
 
-      /*
-       * Wait for golfer-count controls.
-       */
       await this.page.waitForFunction(
         () => {
           const boxes = Array
@@ -579,9 +524,6 @@ class DosLagosSite {
 
       await this.page.waitForTimeout(300);
 
-      /*
-       * Select requested golfer count.
-       */
       const golferResult =
         await this.page.evaluate(
           desired => {
@@ -724,9 +666,6 @@ class DosLagosSite {
 
       await this.page.waitForTimeout(1000);
 
-      /*
-       * Add reservation to cart.
-       */
       const addResult =
         await this.page.evaluate(() => {
           const btn =
@@ -770,9 +709,6 @@ class DosLagosSite {
 
       await this.page.waitForTimeout(2500);
 
-      /*
-       * Open cart.
-       */
       await this._dismissModals();
 
       const cartClicked =
@@ -812,9 +748,6 @@ class DosLagosSite {
 
       await this.page.waitForTimeout(1500);
 
-      /*
-       * Checkout.
-       */
       const checkoutBtn =
         await this.page.$(
           'button:has-text("CHECKOUT"), button:has-text("Checkout")'
@@ -842,9 +775,6 @@ class DosLagosSite {
 
       await this._checkForBlocks();
 
-      /*
-       * Confirm payment page loaded.
-       */
       const hasPaymentForm =
         await this.page.evaluate(
           () =>
@@ -869,30 +799,18 @@ class DosLagosSite {
         };
       }
 
-      /*
-       * THIS IS THE IMPORTANT NEW PART:
-       *
-       * Fill card number, expiration,
-       * sandbox CVV and billing info.
-       */
       const paymentFields = fillPayment
         ? await this.fillPaymentForm(paymentCard)
         : {};
 
-      /*
-       * Give React/payment UI time to
-       * process input/change events.
-       */
       await this.page.waitForTimeout(750);
 
       const screenshotPath = fillPayment ? null : await this.screenshot('checkout-blank');
 
-      // OFF by default. Enable separately from fillPayment to click the
-      // final button after payment fields and the required checkbox are ready.
       let confirmation = null;
       let confirmationDetails = null;
       if (completePurchase) {
-        // Recheck after all dropdowns and billing controls have rerendered.
+
         if (fillPayment) {
           await ensureCardReady(this.page, paymentCard.number);
           console.log('Payment preflight passed: card number matches configured value and field is valid.');
@@ -904,7 +822,7 @@ class DosLagosSite {
           await this.page.getByRole('heading', { name: 'Order Confirmed!', exact: true })
             .waitFor({ state: 'visible', timeout: 30000 });
         } catch {
-          // Capture field identifiers, never payment values or billing-page text.
+
           const invalidFields = await this.page.locator('input[aria-invalid="true"], input:invalid')
             .evaluateAll(inputs => inputs.filter(input => input.getClientRects().length)
               .map(input => input.id || input.name || 'unnamed required input'));
@@ -982,8 +900,7 @@ class DosLagosSite {
   async hasPendingCart() {
     const cart = this.page.getByTestId('core-shopping-cart');
     await cart.waitFor({state:'attached',timeout:10000});
-    // The loaded history page renders an empty hidden container for no cart.
-    // Any rendered cart contents are treated conservatively as a pending hold.
+
     return await cart.evaluate(element => element.childElementCount > 0 || element.textContent.trim().length > 0);
   }
 
@@ -993,8 +910,7 @@ class DosLagosSite {
     const button = this.page.getByTestId('make-your-reservation-btn');
     await button.waitFor({ state: 'visible' });
     await button.click();
-    // A successful click does not prove that payment or booking succeeded.
-    // Keep the browser open so the resulting confirmation/error can be reviewed.
+
   }
 }
 

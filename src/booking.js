@@ -6,14 +6,7 @@ const notify = require('./notify');
 const { computeBookingSlots, groupByDateAndTime } = require('./scheduler');
 
 class BookingEngine {
-  /**
-   * @param {object}  [opts]
-   * @param {boolean} [opts.dryRun=false]   When true, log what would be booked but make no site calls.
-   * @param {import('./site')|null} [opts.site=null]
-   *   An already-authenticated SiteAutomation instance to reuse.  When provided,
-   *   BookingEngine skips init(), login(), and close() — the caller is responsible
-   *   for the browser lifecycle.  When null, BookingEngine manages its own session.
-   */
+
   constructor({ dryRun = false, site = null } = {}) {
     this.dryRun = dryRun;
     this._sharedSite = site !== null;
@@ -57,7 +50,7 @@ class BookingEngine {
     let stats = { total: pending.length, booked: 0, failed: 0, partial: 0 };
 
     if (this._sharedSite) {
-      // Shared-site mode (e.g. sync+book in same session): use provided site for all bookings.
+
       try {
         await this.site.clearCart();
         for (const group of groups) {
@@ -86,7 +79,7 @@ class BookingEngine {
         }
       }
     } else {
-      // Per-golfer mode: group date-groups by golfer_index, create a separate session per golfer.
+
       const golferGroupsMap = new Map();
       for (const group of groups) {
         const gi = group.slots[0]?.golfer_index ?? 0;
@@ -148,7 +141,6 @@ class BookingEngine {
     let { slots } = group;
     logger.info(`Processing: ${date} (${dayLabel}) — ${slots.length} slots`);
 
-    // Check existing reservations on the site before booking
     try {
       const existingReservations = await this.site.getExistingReservations(date);
       if (existingReservations.length > 0) {
@@ -169,52 +161,39 @@ class BookingEngine {
     const preferred = slots[0].course || 'Pines';
     const other = preferred === 'Pines' ? 'Oaks' : 'Pines';
 
-    // Build fallback attempts: try ALL time windows on preferred course first,
-    // then ALL time windows on other course. This ensures all slots for a day
-    // end up on the same course (no splitting across Pines/Oaks).
-    // Offsets: original → -1hr → +1hr → -2hr → +2hr
     const offsets = [0, -60, 60, -120, 120];
     const attempts = [];
     for (const course of [preferred, other]) {
       for (const offset of offsets) {
         const start = offset === 0 ? baseStart : this._shiftTime(baseStart, offset);
         const end   = offset === 0 ? baseEnd   : this._shiftTime(baseEnd, offset);
-        // Note: _shiftTime uses ((total % 1440) + 1440) % 1440 which always produces [0,1439].
-        // The previous negative-time guard was unreachable and has been removed.
+
         attempts.push({ course, start, end, offset });
       }
     }
 
     const totalSlots = slots.length;
     const cumulative = { booked: 0, failed: 0, partial: 0 };
-    let lockedCourse = null; // Once a slot is booked, lock to that course
+    let lockedCourse = null;
 
-    // Cache of tee time strings (NOT element refs) keyed by course name.
-    // Fetched once per course — element refs go stale after navigation so we
-    // only cache the time strings for in-memory window filtering.  _bookSlots
-    // always re-navigates and re-fetches fresh element refs before clicking.
-    const teeTimeCache = new Map(); // courseName → string[]
+    const teeTimeCache = new Map();
 
     for (const [i, attempt] of attempts.entries()) {
       if (slots.length === 0) break;
 
-      // Once we've booked on a course, skip attempts for the other course
-      // This ensures all slots for a day end up on the same course
       if (lockedCourse && attempt.course !== lockedCourse) continue;
 
       const offsetLabel = attempt.offset === 0 ? '' : ` (${attempt.offset > 0 ? '+' : ''}${attempt.offset / 60}hr)`;
       const label = `${attempt.course} ${attempt.start}-${attempt.end}${offsetLabel}`;
       logger.info(`Attempt ${i + 1}/${attempts.length}: ${label} (${slots.length} slots needed)`);
 
-      // Fetch tee times for this course once, reuse for all 5 time-offset attempts.
       if (!teeTimeCache.has(attempt.course)) {
         const courseId = attempt.course === 'Oaks' ? config.site.courses.oaks.id : config.site.courses.pines.id;
         await this.site.navigateToBooking(courseId, date);
         await this.site.selectCourse(attempt.course);
         await this.site.selectDate(date);
         const fetched = await this.site.getAvailableTeeTimes();
-        // Strip element refs — they go stale after the next navigation.
-        // Only the time strings are needed for window filtering here.
+
         teeTimeCache.set(attempt.course, fetched.map(t => ({ time: t.time })));
         logger.info(`Fetched ${fetched.length} tee time(s) for ${attempt.course} on ${date} (cached)`);
       }
@@ -223,9 +202,9 @@ class BookingEngine {
       const result = await this._tryCourse(slots, date, dayLabel, attempt.course, attempt.start, attempt.end, cachedTimes);
 
       if (result.booked > 0) {
-        lockedCourse = attempt.course; // Lock to this course for remaining slots
+        lockedCourse = attempt.course;
         cumulative.booked += result.booked;
-        // Filter out booked slots for remaining attempts
+
         slots = slots.filter(s => !result._bookedSlotIds || !result._bookedSlotIds.has(s.id));
         if (slots.length === 0) {
           logger.info(`All slots booked on ${label}`);
@@ -239,7 +218,6 @@ class BookingEngine {
       }
     }
 
-    // Final reporting
     cumulative.failed = totalSlots - cumulative.booked;
 
     if (cumulative.booked === totalSlots) {
@@ -256,20 +234,6 @@ class BookingEngine {
     return cumulative;
   }
 
-  /**
-   * Try to book slots on a single course within a specific time window.
-   * First tries consecutive slots, then falls back to individual slots.
-   * Returns { booked, failed, slotsFound, _bookedSlotIds }
-   *
-   * @param {object[]} slots        - DB slot records to fill.
-   * @param {string}   date         - ISO date string.
-   * @param {string}   dayLabel     - Human-readable day label.
-   * @param {string}   courseName   - 'Pines' or 'Oaks'.
-   * @param {string}   windowStart  - HH:MM window start.
-   * @param {string}   windowEnd    - HH:MM window end.
-   * @param {object[]} cachedTimes  - Pre-fetched tee times ({ time } objects, no stale element refs).
-   *                                  Provided by _processGroup which fetches once per course/date.
-   */
   async _tryCourse(slots, date, dayLabel, courseName, windowStart, windowEnd, cachedTimes) {
     const slotsNeeded = slots.length;
 
@@ -278,14 +242,12 @@ class BookingEngine {
       return { booked: 0, failed: 0, slotsFound: false, _bookedSlotIds: new Set() };
     }
 
-    // Try consecutive slots first (ideal for group play)
     const consecutive = this.site.findConsecutiveSlots(cachedTimes, windowStart, windowEnd, slotsNeeded);
     if (consecutive.length > 0) {
       const result = await this._bookSlots(consecutive, slots, date, dayLabel, courseName);
       return { ...result, slotsFound: true };
     }
 
-    // Fall back to individual slots in the window
     const available = this.site.findSlotsInWindow(cachedTimes, windowStart, windowEnd, slotsNeeded);
     if (available.length === 0) {
       logger.warn(`No slots in ${windowStart}-${windowEnd} on ${courseName}`);
@@ -297,12 +259,6 @@ class BookingEngine {
     return { ...result, slotsFound: true };
   }
 
-  /**
-   * Filter out pending slots that are already covered by existing reservations on the site.
-   * Compares each existing reservation time against pending slot target times (±15 min match).
-   * Matched slots are marked as 'confirmed' in the DB.
-   * Returns the remaining unmatched slots.
-   */
   async _filterAlreadyBooked(slots, existingReservations, date) {
     const remaining = [];
 
@@ -310,7 +266,7 @@ class BookingEngine {
       const slotMinutes = this._timeToMinutes(slot.target_time);
       const match = existingReservations.find(res => {
         const resMinutes = this._timeToMinutes(res.time);
-        // If slot has a booking window, match any reservation within window ±2hr (covers all fallback offsets)
+
         if (slot.window_start && slot.window_end) {
           const winStart = this._timeToMinutes(slot.window_start) - 120;
           const winEnd   = this._timeToMinutes(slot.window_end)   + 120;
@@ -320,8 +276,7 @@ class BookingEngine {
       });
 
       if (match) {
-        // Guard: if the site shows fewer than 4 players on this reservation,
-        // do NOT mark it confirmed — the slot must still be booked properly.
+
         const matchPlayers = typeof match.players === 'number' ? match.players : 4;
         if (matchPlayers < 4) {
           logger.warn(
@@ -337,7 +292,7 @@ class BookingEngine {
             confirmationNumber: 'EXISTING_RESERVATION',
             screenshotPath: null,
           });
-          // Remove the matched reservation so it doesn't match multiple slots
+
           const idx = existingReservations.indexOf(match);
           existingReservations.splice(idx, 1);
         }
@@ -370,18 +325,12 @@ class BookingEngine {
     const result = { booked: 0, failed: 0, partial: 0, _bookedSlotIds: new Set() };
     const slotsNeeded = slots.length;
     const courseId = courseName === 'Oaks' ? config.site.courses.oaks.id : config.site.courses.pines.id;
-    // Track players actually booked vs target (4 per slot) so we can add compensating slots
+
     let totalPlayersBooked = 0;
     const targetPlayersTotal = slotsNeeded * 4;
 
-    // Store the times we want to book (element refs go stale after navigation)
     const timesToBook = consecutive.map(t => t.time);
 
-    // TASK-019: Multi-batch split enforcement.
-    // The site allows at most 3 tee time slots per booking transaction.
-    // The current implementation completes a full checkout per slot (batch size = 1),
-    // which always satisfies the ≤3 constraint.  If a caller somehow passes > 3 slots
-    // we log the batch breakdown so the intent is clear in the run log.
     const MAX_BATCH_SIZE = 3;
     if (timesToBook.length > MAX_BATCH_SIZE) {
       const numBatches = Math.ceil(timesToBook.length / MAX_BATCH_SIZE);
@@ -403,9 +352,6 @@ class BookingEngine {
 
       logger.info(`Booking slot ${i}: ${targetTime} for ${dbSlot.players} players`);
 
-      // Re-navigate to get fresh element references.
-      // _tryCourse no longer pre-navigates (it works from cached time strings),
-      // so _bookSlots is responsible for navigation on every slot including the first.
       await this.site.navigateToBooking(courseId, date);
       await this.site.selectCourse(courseName);
       await this.site.selectDate(date);
@@ -419,11 +365,10 @@ class BookingEngine {
         continue;
       }
 
-      // Book Now → 4 golfers → Add to Cart
       const bookResult = await this.site.bookSlot(match.element, i);
 
       if (bookResult.success) {
-        // Complete checkout: Terms → Complete Your Purchase
+
         const checkoutResult = await this.site.completeCheckout();
 
         if (!checkoutResult.success) {
@@ -436,18 +381,13 @@ class BookingEngine {
         const confirmation = checkoutResult.confirmationNumber || 'CONFIRMED';
         logger.info(`Slot ${i} (${targetTime}) checkout succeeded! Confirmation: ${confirmation}`);
 
-        // TASK-020: Post-checkout verification via Reservations page.
-        // Only run verification when we have a real numeric confirmation number.
-        // If the page loads but does not contain the booking, mark as failed.
-        // If the page is unreachable / returns no reservations at all (possible
-        // caching delay after checkout), skip verification and keep confirmed.
         let verificationFailed = false;
         if (/^\d+$/.test(confirmation)) {
           try {
             const vResult = await this.site.verifyBookingOnSite(date, targetTime);
             if (!vResult.verified) {
               if (vResult.reservations && vResult.reservations.length > 0) {
-                // Reservations page loaded but our booking was NOT among them — real failure.
+
                 logger.warn(
                   `Slot ${i} (${targetTime}) VERIFICATION FAILED: booking Res#${confirmation} ` +
                   `not found on Reservations page for ${date} — marking failed`
@@ -456,7 +396,7 @@ class BookingEngine {
                 result.failed++;
                 verificationFailed = true;
               } else {
-                // Page returned no reservations — likely a caching delay; skip and keep confirmed.
+
                 logger.warn(
                   `Slot ${i} (${targetTime}) verification skipped: Reservations page returned no entries ` +
                   `(possible caching delay) — keeping confirmed`
@@ -466,7 +406,7 @@ class BookingEngine {
               logger.info(`Slot ${i} (${targetTime}) verification passed`);
             }
           } catch (verifyErr) {
-            // Unreachable / timeout — skip verification; keep confirmed.
+
             logger.warn(
               `Slot ${i} (${targetTime}) verification error (${verifyErr.message}) — skipping, keeping confirmed`
             );
@@ -491,27 +431,24 @@ class BookingEngine {
         result.failed++;
       }
 
-      // Brief pause between slots — not needed after the last one
       if (i < timesToBook.length - 1) {
         await new Promise(r => setTimeout(r, 2000));
       }
     }
 
-    // If fewer-than-4-player slots were booked, add compensating pending slots
-    // so the next booking run can fill the remaining players up to the target.
     if (totalPlayersBooked > 0 && totalPlayersBooked < targetPlayersTotal) {
       const deficit = targetPlayersTotal - totalPlayersBooked;
-      const extraSlots = Math.ceil(deficit / 4); // additional 4-player-target slots needed
+      const extraSlots = Math.ceil(deficit / 4);
       logger.info(
         `Player deficit on ${date}: booked ${totalPlayersBooked}/${targetPlayersTotal} players — ` +
         `adding ${extraSlots} extra pending slot(s)`
       );
-      // Use the last booked slot as reference for day_label, window, golfer_index
+
       const refSlot = slots[slots.length - 1];
       const maxSlotIndex = Math.max(...slots.map(s => s.slot_index));
       const extraBookings = [];
       for (let e = 0; e < extraSlots; e++) {
-        // Space extra slots 10 min after the last target_time
+
         const lastTime = slots[slots.length - 1].target_time;
         const lastMins = this._timeToMinutes(lastTime) + (e + 1) * 10;
         const extraTime = this._minutesToTime(lastMins);

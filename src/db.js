@@ -4,14 +4,11 @@ const fs = require('fs');
 const config = require('./config');
 
 let db = null;
-let _dbInitPromise = null; // guards against concurrent initialization
+let _dbInitPromise = null;
 
 async function getDb() {
   if (db) return db;
 
-  // Serialize concurrent callers: if initialization is already in progress,
-  // wait for it rather than spawning a second SQL.js init that would
-  // overwrite `db` and discard in-flight mutations from the first caller.
   if (_dbInitPromise) return _dbInitPromise;
 
   _dbInitPromise = (async () => {
@@ -52,10 +49,9 @@ async function getDb() {
       )
     `);
 
-    // Add columns to existing databases
-    try { db.run(`ALTER TABLE bookings ADD COLUMN window_start TEXT`); } catch (e) { /* column exists */ }
-    try { db.run(`ALTER TABLE bookings ADD COLUMN window_end TEXT`); } catch (e) { /* column exists */ }
-    try { db.run(`ALTER TABLE bookings ADD COLUMN golfer_index INTEGER NOT NULL DEFAULT 0`); } catch (e) { /* column exists */ }
+    try { db.run(`ALTER TABLE bookings ADD COLUMN window_start TEXT`); } catch (e) {                     }
+    try { db.run(`ALTER TABLE bookings ADD COLUMN window_end TEXT`); } catch (e) {                     }
+    try { db.run(`ALTER TABLE bookings ADD COLUMN golfer_index INTEGER NOT NULL DEFAULT 0`); } catch (e) {                     }
 
     db.run(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)`);
@@ -133,16 +129,7 @@ module.exports = {
   },
 
   async getAllUpcoming() {
-    // Always read a fresh snapshot from disk for the calendar/API view.
-    // This ensures the web UI reflects data written by external processes
-    // (booking engine, sync) without corrupting the in-memory `db` singleton
-    // that mutation methods (markSuccess, markCancelled, etc.) write to.
-    //
-    // IMPORTANT: we intentionally do NOT replace the module-level `db` here.
-    // Replacing `db` after an `await` yields to the event loop can cause
-    // other in-flight mutations to be silently lost because they write to
-    // the OLD `db` instance while the module-level `db` now points to a
-    // freshly-loaded snapshot that lacks those writes.
+
     if (fs.existsSync(config.dbPath)) {
       const SQL = await initSqlJs();
       const freshDb = new SQL.Database(fs.readFileSync(config.dbPath));
@@ -277,27 +264,15 @@ module.exports = {
     fs.writeFileSync(metaPath, JSON.stringify({ lastSyncAt: isoString }), 'utf8');
   },
 
-  /**
-   * Remove stale 'skipped' rows whose day_label does not match any current
-   * schedule entry's label.  These accumulate when the schedule changes
-   * (e.g. Saturday window or slot count altered) and pollute the status view.
-   *
-   * Only 'skipped' rows are removed — confirmed/pending/failed rows are
-   * untouched regardless of their day_label.
-   *
-   * @returns {Promise<number>} Number of rows deleted.
-   */
   async cleanupStaleSlots() {
     await getDb();
     const validLabels = config.schedule.map(e => e.label);
     if (validLabels.length === 0) return 0;
 
-    // Build a parameterised NOT IN clause.
     const placeholders = validLabels.map((_, i) => `$label${i}`).join(', ');
     const params = {};
     validLabels.forEach((label, i) => { params[`$label${i}`] = label; });
 
-    // Count before deletion so we can return the number removed.
     const countRows = queryAll(
       `SELECT COUNT(*) AS n FROM bookings WHERE status = 'skipped' AND day_label NOT IN (${placeholders})`,
       params

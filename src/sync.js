@@ -1,91 +1,38 @@
 'use strict';
 
-/**
- * sync.js
- *
- * Exports runSync(siteInstance?) — the central sync orchestrator.
- *
- * Orchestration flow:
- *   1. Obtain an authenticated SiteAutomation session (create one if none provided).
- *   2. Step 1 — Scrape the visible upcoming reservation list via
- *      site.scrapeReservationHistory(). Build a date-keyed map of site slots.
- *   3. Step 2 — Identify DB bookings still carrying placeholder confirmation
- *      numbers. Collect known real numeric IDs from other DB records. For each
- *      known ID, probe ±PROBE_RADIUS IDs via site.fetchReservationById(). Add
- *      any results for dates not already covered by Step 1 into the map.
- *   4. For each date in the combined map, load the matching DB rows and call
- *      reconcileDate() from src/reconcile.js.
- *   5. FR-012 WARN — for any confirmed DB booking with a real numeric
- *      confirmation number whose date was visible to Step 1 but no matching
- *      site reservation was found, emit a WARN log.
- *   6. Persist db.setLastSyncAt() with the current ISO timestamp.
- *   7. Return { checked, updated, warnings, errors }.
- *
- * Session sharing:
- *   - If siteInstance is null, creates a new SiteAutomation, calls init() and
- *     login(), and closes the browser in a finally block.
- *   - If siteInstance is provided (e.g. from the daily scheduler), assumes the
- *     session is already authenticated and skips init/login/close.
- */
-
 const db = require('./db');
 const SiteAutomation = require('./site');
 const { reconcileDate } = require('./reconcile');
 const logger = require('./logger');
 const config = require('./config');
 
-/**
- * How many IDs above and below a known confirmation number to probe when
- * searching for reservations not visible in the list view.
- */
 const PROBE_RADIUS = 10;
 
-/**
- * Placeholder confirmation numbers that indicate a DB row still needs a real
- * confirmation number from the site.  Mirrors the set in reconcile.js.
- */
 const PLACEHOLDER_CONFIRMATION_NUMBERS = new Set([
   'EXISTING_RESERVATION',
   'CONFIRMED',
   'access',
 ]);
 
-/**
- * Returns true when a confirmation number is a known placeholder or is
- * otherwise not a real numeric reservation ID.
- *
- * @param {string|null|undefined} value
- * @returns {boolean}
- */
 function isPlaceholder(value) {
   if (!value) return true;
   if (PLACEHOLDER_CONFIRMATION_NUMBERS.has(value)) return true;
-  // Any non-numeric string is also treated as a placeholder.
+
   return !/^\d+$/.test(value);
 }
 
-/**
- * Main sync orchestrator.
- *
- * @param {SiteAutomation|null} [siteInstance=null]
- *   An already-authenticated SiteAutomation instance to reuse, or null to have
- *   runSync() create and manage its own browser session.
- *
- * @returns {Promise<{ checked: number, updated: number, warnings: number, errors: number }>}
- */
 async function runSync(siteInstance = null) {
   const startTime = new Date();
   logger.info(`[SYNC] Starting sync at ${startTime.toISOString()}`);
 
   const ownsSession = siteInstance === null;
-  /** @type {SiteAutomation} */
+
   let site = siteInstance;
 
-  // Counters for the summary object.
   let totalUpdated = 0;
   let totalWarnings = 0;
   let totalErrors = 0;
-  /** @type {Set<string>} dates examined (Step 1 + Step 2 combined) */
+
   const checkedDates = new Set();
 
   try {
@@ -93,24 +40,16 @@ async function runSync(siteInstance = null) {
       logger.info('[SYNC] Reusing provided SiteAutomation session');
     }
 
-    // ── Load all upcoming DB bookings once (avoids repeated queries) ─────────
     await db.getDb();
     const allUpcoming = await db.getAllUpcoming();
     logger.info(`[SYNC] Loaded ${allUpcoming.length} upcoming DB booking(s)`);
 
-    // Build a date-keyed index of DB rows for fast lookup during reconciliation.
-    /** @type {Map<string, object[]>} date → DB booking rows */
     const dbByDate = new Map();
     for (const booking of allUpcoming) {
       if (!dbByDate.has(booking.date)) dbByDate.set(booking.date, []);
       dbByDate.get(booking.date).push(booking);
     }
 
-    // ── Step 1: Scrape visible reservation list ───────────────────────────────
-    // When ownsSession=true, scrape every configured golfer account so that
-    // reservations booked under any golfer (round-robin rotation) are captured.
-    // When a session is provided (scheduler path), scrape only that session.
-    /** @type {Array<{ date: string, time: string, course: string, confirmationNumber: string }>} */
     let listReservations = [];
 
     if (ownsSession) {
@@ -130,7 +69,7 @@ async function runSync(siteInstance = null) {
           logger.info(`[SYNC] Step 1: Golfer ${gi} — ${golferRes.length} reservation(s) found`);
 
           for (const r of golferRes) {
-            // Deduplicate by confirmation number across accounts.
+
             if (!listReservations.some(x => x.confirmationNumber === r.confirmationNumber)) {
               listReservations.push(r);
             }
@@ -143,7 +82,7 @@ async function runSync(siteInstance = null) {
         }
       }
     } else {
-      // Shared session provided — scrape as that account only.
+
       try {
         listReservations = await site.scrapeReservationHistory();
       } catch (err) {
@@ -154,8 +93,6 @@ async function runSync(siteInstance = null) {
 
     logger.info(`[SYNC] Step 1: Found ${listReservations.length} reservation(s) total across all accounts`);
 
-    // Group Step 1 results by date.
-    /** @type {Map<string, Array<{ date, time, course, confirmationNumber }>>} */
     const siteByDate = new Map();
     for (const r of listReservations) {
       if (!r.date) continue;
@@ -163,13 +100,8 @@ async function runSync(siteInstance = null) {
       siteByDate.get(r.date).push(r);
     }
 
-    // Track which dates were visible in Step 1 for FR-012 WARN logic below.
-    /** @type {Set<string>} */
     const step1VisibleDates = new Set(siteByDate.keys());
 
-    // ── Step 2: Direct ID probing for dates still missing real confirmation numbers ──
-    //
-    // Identify DB rows that still carry a placeholder confirmation number.
     const placeholderRows = allUpcoming.filter(
       b =>
         ['confirmed', 'pending', 'cancelled'].includes(b.status) &&
@@ -178,7 +110,7 @@ async function runSync(siteInstance = null) {
     const datesToProbe = new Set(
       placeholderRows
         .map(b => b.date)
-        .filter(d => !siteByDate.has(d)) // only dates NOT already covered by Step 1
+        .filter(d => !siteByDate.has(d))
     );
 
     if (datesToProbe.size > 0) {
@@ -186,7 +118,6 @@ async function runSync(siteInstance = null) {
         `[SYNC] Step 2: ${datesToProbe.size} date(s) still need probing: ${[...datesToProbe].sort().join(', ')}`
       );
 
-      // Collect all known real numeric confirmation numbers from DB records.
       const knownIds = allUpcoming
         .filter(b => b.confirmation_number && /^\d+$/.test(b.confirmation_number))
         .map(b => parseInt(b.confirmation_number, 10));
@@ -194,27 +125,23 @@ async function runSync(siteInstance = null) {
       if (knownIds.length === 0) {
         logger.info('[SYNC] Step 2: No known numeric confirmation IDs to probe around — skipping');
       } else {
-        // Map of date → reservations found via direct probe.
-        /** @type {Map<string, Array<{ date, time, course, confirmationNumber }>>} */
+
         const probeByDate = new Map();
         let totalProbeHits = 0;
 
         if (ownsSession) {
-          // When running standalone, probe per-golfer so each account can only
-          // see its own reservation detail pages.
+
           const today = new Date().toISOString().slice(0, 10);
 
           for (let gi = 0; gi < config.golfers.length; gi++) {
             const golfer = config.golfers[gi];
 
-            // Only probe for dates that have at least one DB row assigned to this golfer.
             const golferDatesToProbe = [...datesToProbe].filter(d => {
               const rows = dbByDate.get(d) || [];
               return rows.some(b => (b.golfer_index || 0) === gi);
             });
             if (golferDatesToProbe.length === 0) continue;
 
-            // Collect known IDs from THIS golfer's confirmed bookings.
             const golferKnownIds = allUpcoming
               .filter(b => (b.golfer_index || 0) === gi && b.confirmation_number && /^\d+$/.test(b.confirmation_number))
               .map(b => parseInt(b.confirmation_number, 10));
@@ -277,7 +204,7 @@ async function runSync(siteInstance = null) {
             }
           }
         } else {
-          // Shared session provided — probe using that single session.
+
           const probeIdSet = new Set();
           for (const id of knownIds) {
             for (let delta = -PROBE_RADIUS; delta <= PROBE_RADIUS; delta++) {
@@ -318,7 +245,6 @@ async function runSync(siteInstance = null) {
 
         logger.info(`[SYNC] Step 2: Probe complete — ${totalProbeHits} new reservation(s) found`);
 
-        // Merge probe results into the combined siteByDate map.
         for (const [date, slots] of probeByDate.entries()) {
           if (!siteByDate.has(date)) {
             siteByDate.set(date, slots);
@@ -332,7 +258,6 @@ async function runSync(siteInstance = null) {
           }
         }
 
-        // Log dates that probing could not resolve.
         const stillMissing = [...datesToProbe].filter(d => !probeByDate.has(d));
         if (stillMissing.length > 0) {
           logger.info(
@@ -345,7 +270,6 @@ async function runSync(siteInstance = null) {
       logger.info('[SYNC] Step 2: No dates need direct probing');
     }
 
-    // ── Reconcile each date ───────────────────────────────────────────────────
     logger.info(`[SYNC] Reconciling ${siteByDate.size} date(s)...`);
 
     for (const [date, siteSlots] of siteByDate.entries()) {
@@ -371,20 +295,6 @@ async function runSync(siteInstance = null) {
       }
     }
 
-    // ── FR-012: Warn about confirmed bookings with real numeric confirmation
-    //    numbers that were visible to Step 1 but not found on the site ─────────
-    //
-    // A booking qualifies for this warning when ALL of:
-    //   a) status = 'confirmed'
-    //   b) confirmation_number is a real numeric ID
-    //   c) the booking's date appeared in the Step 1 visible window
-    //   d) the site returned ZERO slots for that date (i.e. no entry in siteByDate
-    //      for that date), OR the positional reconciliation left this booking
-    //      unmatched (notFound path — already warned inside reconcileDate, but we
-    //      emit an additional higher-visibility WARN here per FR-012).
-    //
-    // We focus on the "date was visible but site had NO reservations at all" case
-    // since the positional-mismatch case is already warned inside reconcileDate().
     const fr012Candidates = allUpcoming.filter(
       b =>
         b.status === 'confirmed' &&
@@ -403,15 +313,12 @@ async function runSync(siteInstance = null) {
     }
 
   } finally {
-    // When ownsSession=true, each per-golfer session is opened and closed
-    // inside the Step 1 / Step 2 loops above — nothing to close here.
-    // When a shared session was provided, the caller owns its lifecycle.
+
     if (!ownsSession && site) {
-      // (caller closes the shared session — no action needed)
+
     }
   }
 
-  // ── Persist last sync timestamp ──────────────────────────────────────────
   try {
     db.setLastSyncAt(new Date().toISOString());
   } catch (err) {

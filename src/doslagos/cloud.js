@@ -1,6 +1,6 @@
-// Cloud jobs perform ONE scan. Scheduling is managed by GitHub Actions.
+
 require('dotenv').config();
-// Keep the cloud browser headed by default; GitHub supplies Xvfb.
+
 process.env.HEADLESS = process.env.HEADLESS || 'false';
 delete process.env.DOSLAGOS_CHROMIUM_EXECUTABLE_PATH;
 const RedisState = require('./redis-state');
@@ -10,7 +10,7 @@ const RedisState = require('./redis-state');
     const storage = require('./state');
     const path = require('node:path');
     const file=path.join(__dirname,'../../data/doslagos-state.json');
-    // No credentials are stored: only dates, notification history, booking locks.
+
     const release=await store.acquire();
     try {
       const local = storage.load(file);
@@ -23,7 +23,7 @@ const RedisState = require('./redis-state');
     finally { await release(); }
     return;
   }
-  // Explicit manual test runs once; it does not enable scheduled purchases.
+
   const purchaseTest = process.argv.find(arg => arg.startsWith('--purchase-test-date='));
   const testDate = purchaseTest?.slice('--purchase-test-date='.length);
   if (purchaseTest && !/^\d{4}-\d{2}-\d{2}$/.test(testDate)) {

@@ -10,7 +10,7 @@ test('validates configured numbers without including them in errors', () => {
   }
 });
 
-// Simulate the checkout mask and a form rerender resetting its field.
+
 function fixture({ reset = false, reject = false, disabled = false } = {}) {
   const input = { value: reset ? '' : '4111 1111 1111 1111', disabled,
     validity: { valid: true }, getAttribute: () => reject ? 'true' : 'false' };

@@ -1,12 +1,12 @@
-/**
- * GolfScheduler — Comprehensive Test Suite
- * Covers: scheduler logic, DB operations, booking engine utilities,
- *         web API endpoints, HTML/CSS audit, config, edge cases.
- *
- * Run with:  node --test tests/test.js
- */
 
-// ─── 1. Set env vars BEFORE any require() that touches config.js ─────────────
+
+
+
+
+
+
+
+
 process.env.GOLF_EMAIL    = 'test@example.com';
 process.env.GOLF_PASSWORD = 'testpass123';
 process.env.PORT          = '3099';
@@ -18,20 +18,20 @@ const path = require('path');
 const TMP_DB = path.join(os.tmpdir(), `golf_test_${Date.now()}.db`);
 process.env.DB_PATH = TMP_DB;
 
-// ─── 2. Imports ───────────────────────────────────────────────────────────────
+
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http   = require('http');
 const fs     = require('fs');
 
-// ─── 3a. Module-level server lifecycle (shared across D, E, G sections) ───────
+
 let _testServer = null;
 before(async () => {
   const { Server } = require('http');
   const origListen = Server.prototype.listen;
   Server.prototype.listen = function (port, ...rest) {
     if (String(port) === '3099') _testServer = this;
-    Server.prototype.listen = origListen; // restore immediately
+    Server.prototype.listen = origListen;
     return origListen.call(this, port, ...rest);
   };
   const { startServer } = require('../src/web');
@@ -44,7 +44,7 @@ after(async () => {
   try { fs.unlinkSync(TMP_DB); } catch (_) {}
 });
 
-// ─── 3. HTTP helpers ──────────────────────────────────────────────────────────
+
 function httpGet(url) {
   return new Promise((resolve, reject) => {
     http.get(url, res => {
@@ -76,9 +76,9 @@ function httpPost(url, body = {}) {
   });
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// SECTION A: SCHEDULER — pure functions
-// ═════════════════════════════════════════════════════════════════════════════
+
+
+
 describe('A — scheduler.computeBookingSlots()', () => {
   const { computeBookingSlots, groupByDateAndTime } = require('../src/scheduler');
 
@@ -87,10 +87,10 @@ describe('A — scheduler.computeBookingSlots()', () => {
   });
 
   test('A02 only generates slots for Mon/Tue/Fri/Sat/Sun (days 0,1,2,5,6)', () => {
-    // Sunday (0) was added to the schedule in schedule.json (8 AM–10 AM, alternating course)
+
     const validDays = new Set([0, 1, 2, 5, 6]);
     for (const slot of computeBookingSlots()) {
-      // parse date as local date by appending noon time to avoid TZ shift
+
       const dow = new Date(slot.date + 'T12:00:00').getDay();
       assert.ok(validDays.has(dow), `Unexpected day ${dow} for ${slot.date}`);
     }
@@ -146,12 +146,12 @@ describe('A — scheduler.computeBookingSlots()', () => {
   });
 
   test('A08 all courses are Pines or Oaks (Sunday alternates per ISO week)', () => {
-    // Sunday uses "alternating" course sentinel resolved to Pines (even week) or Oaks (odd week).
-    // Mon/Tue/Fri/Sat are always Pines.
+
+
     const validCourses = new Set(['Pines', 'Oaks']);
     for (const s of computeBookingSlots()) {
       assert.ok(validCourses.has(s.course), `Unexpected course "${s.course}" for ${s.date}`);
-      // Non-Sunday slots must always be Pines
+
       const dow = new Date(s.date + 'T12:00:00').getDay();
       if (dow !== 0) {
         assert.equal(s.course, 'Pines', `${s.date} (day ${dow}) should be Pines, got ${s.course}`);
@@ -206,23 +206,23 @@ describe('A — scheduler.computeBookingSlots()', () => {
   });
 });
 
-// ═════════════════════════════════════════════════════════════════════════════
-// SECTION B: BOOKING ENGINE — pure utility methods
-// ═════════════════════════════════════════════════════════════════════════════
+
+
+
 describe('B — BookingEngine pure methods', () => {
   const BookingEngine = require('../src/booking');
-  // Bypass constructor (avoids Playwright) by using Object.create
+
   const engine = Object.create(BookingEngine.prototype);
   engine.site    = {};
   engine.dryRun  = false;
 
-  // _timeToMinutes
+
   test('B01 _timeToMinutes("00:00") = 0',   () => assert.equal(engine._timeToMinutes('00:00'), 0));
   test('B02 _timeToMinutes("12:00") = 720',  () => assert.equal(engine._timeToMinutes('12:00'), 720));
   test('B03 _timeToMinutes("23:59") = 1439', () => assert.equal(engine._timeToMinutes('23:59'), 1439));
   test('B04 _timeToMinutes("08:30") = 510',  () => assert.equal(engine._timeToMinutes('08:30'), 510));
 
-  // _shiftTime — forward
+
   test('B05 _shiftTime("12:00", +60) = "13:00"', () =>
     assert.equal(engine._shiftTime('12:00', 60), '13:00'));
   test('B06 _shiftTime("12:00", +120) = "14:00"', () =>
@@ -230,13 +230,13 @@ describe('B — BookingEngine pure methods', () => {
   test('B07 _shiftTime wraps past midnight: ("23:00", +120) = "01:00"', () =>
     assert.equal(engine._shiftTime('23:00', 120), '01:00'));
 
-  // _shiftTime — backward
+
   test('B08 _shiftTime("12:00", -60) = "11:00"', () =>
     assert.equal(engine._shiftTime('12:00', -60), '11:00'));
   test('B09 _shiftTime("02:00", -120) = "00:00"', () =>
     assert.equal(engine._shiftTime('02:00', -120), '00:00'));
 
-  // _shiftTime now wraps negative totals correctly across midnight.
+
   test('B10 _shiftTime underflow: ("00:30", -60) wraps to "23:30"', () => {
     const result = engine._shiftTime('00:30', -60);
     assert.equal(result, '23:30',
@@ -249,7 +249,7 @@ describe('B — BookingEngine pure methods', () => {
       `Expected "23:00" for midnight-wrap underflow (got "${result}")`);
   });
 
-  // _filterAlreadyBooked
+
   test('B12 _filterAlreadyBooked: ±15 min match marks slot confirmed', async () => {
     const db = require('../src/db');
     const captured = [];
@@ -288,7 +288,7 @@ describe('B — BookingEngine pure methods', () => {
     const orig = db.markSuccess;
     db.markSuccess = async () => { called = true; };
 
-    // window 12:00–13:00, reservation at 10:15 (12:00 - 120min = 10:00 → within range)
+
     const slot = { id: 503, slot_index: 0, target_time: '12:00',
                    window_start: '12:00', window_end: '13:00' };
     const remaining = await engine._filterAlreadyBooked(
@@ -319,9 +319,9 @@ describe('B — BookingEngine pure methods', () => {
   });
 });
 
-// ═════════════════════════════════════════════════════════════════════════════
-// SECTION C: DATABASE OPERATIONS
-// ═════════════════════════════════════════════════════════════════════════════
+
+
+
 describe('C — db.js operations', () => {
   const db = require('../src/db');
 
@@ -348,7 +348,7 @@ describe('C — db.js operations', () => {
   test('C02 ensureBookings: UNIQUE(date, target_time, slot_index) prevents duplicates', async () => {
     const b = mk({ date: '2027-01-16' });
     await db.ensureBookings([b]);
-    await db.ensureBookings([b]); // duplicate
+    await db.ensureBookings([b]);
     const rows = await db.getBookingsByDate('2027-01-16');
     assert.equal(rows.length, 1, 'INSERT OR IGNORE should prevent duplicate');
   });
@@ -487,15 +487,15 @@ describe('C — db.js operations', () => {
   });
 
   test('C17 DB persists to disk (file exists after save)', async () => {
-    // ensureBookings calls save() internally
+
     await db.ensureBookings([mk({ date: '2027-01-28', slotIndex: 0 })]);
     assert.ok(fs.existsSync(TMP_DB), 'DB file should be written to disk');
   });
 });
 
-// ═════════════════════════════════════════════════════════════════════════════
-// SECTION D: WEB API ENDPOINTS (HTTP integration)
-// ═════════════════════════════════════════════════════════════════════════════
+
+
+
 describe('D — web API endpoints', () => {
   const BASE = 'http://localhost:3099';
 
@@ -504,7 +504,7 @@ describe('D — web API endpoints', () => {
     assert.equal(r.status, 200);
     assert.ok(r.headers['content-type'].includes('application/json'));
     const body = JSON.parse(r.body);
-    // API returns { bookings: [...], lastSyncAt: '...' | null }
+
     assert.ok(typeof body === 'object' && body !== null, 'Response should be an object');
     assert.ok(Array.isArray(body.bookings), 'body.bookings should be an array');
   });
@@ -559,7 +559,7 @@ describe('D — web API endpoints', () => {
     }]);
     const [row] = await db.getBookingsByDate('2027-02-01');
     await db.markCancelled(row.id);
-    // Settle delay to allow the DB singleton state to propagate before the API reads it
+
     await new Promise(r => setTimeout(r, 100));
 
     const r = await httpPost(`${BASE}/api/cancel/${row.id}`);
@@ -571,7 +571,7 @@ describe('D — web API endpoints', () => {
 
   test('D09 POST /api/cancel/:id — EXISTING_RESERVATION confirmation → marks cancelled without site', async () => {
     const db = require('../src/db');
-    // Use a unique date unlikely to collide with DB auto-reload state
+
     const testDate = '2027-03-02';
     await db.ensureBookings([{
       date: testDate, dayLabel: 'Tuesday 12 PM-1 PM',
@@ -585,10 +585,10 @@ describe('D — web API endpoints', () => {
     await db.markSuccess(row.id, { actualTime: '12:00', course: 'Pines',
                                    confirmationNumber: 'EXISTING_RESERVATION',
                                    screenshotPath: null });
-    // Settle delay: allow async disk save to flush before the API reads the booking
+
     await new Promise(r => setTimeout(r, 50));
 
-    // Verify the DB state BEFORE cancel
+
     const before = await db.getBookingById(row.id);
     assert.equal(before.status, 'confirmed', 'Pre-cancel status should be confirmed');
     assert.equal(before.confirmation_number, 'EXISTING_RESERVATION');
@@ -597,11 +597,11 @@ describe('D — web API endpoints', () => {
     assert.equal(r.status, 200);
     const json = JSON.parse(r.body);
     assert.equal(json.success, true);
-    // Message should indicate it was marked cancelled (not "Already cancelled")
+
     assert.ok(json.message && json.message.toLowerCase().includes('cancel'),
       `Expected cancel message, got: "${json.message}"`);
 
-    // Settle delay for in-process DB update — 100ms avoids flakiness on slower systems
+
     await new Promise(r => setTimeout(r, 100));
 
     const updated = await db.getBookingById(row.id);
@@ -625,7 +625,7 @@ describe('D — web API endpoints', () => {
     await db.markSuccess(row.id, { actualTime: '12:00', course: 'Pines',
                                    confirmationNumber: 'CONFIRMED',
                                    screenshotPath: null });
-    // Settle delay: allow async disk save to flush before the API reads the booking
+
     await new Promise(r => setTimeout(r, 50));
 
     const before = await db.getBookingById(row.id);
@@ -636,7 +636,7 @@ describe('D — web API endpoints', () => {
     const json = JSON.parse(r.body);
     assert.equal(json.success, true);
 
-    // Settle delay for in-process DB update — 100ms avoids flakiness on slower systems
+
     await new Promise(r => setTimeout(r, 100));
 
     const updated = await db.getBookingById(row.id);
@@ -653,21 +653,21 @@ describe('D — web API endpoints', () => {
   });
 });
 
-// ═════════════════════════════════════════════════════════════════════════════
-// SECTION E: HTML / CSS AUDIT (static analysis of generated HTML)
-// ═════════════════════════════════════════════════════════════════════════════
+
+
+
 describe('E — HTML / CSS audit', () => {
   let html = '';
 
   before(async () => {
-    // Server is already running (module-level before started it)
+
     const r = await httpGet('http://localhost:3099/');
     html = r.body;
   });
 
-  // ── Color / Contrast ──────────────────────────────────────────────────────
+
   test('E01 body background is not pure white (#ffffff)', () => {
-    // Check the body rule specifically — extract the body { ... } block
+
     const bodyBlock = html.match(/body\s*\{([^}]+)\}/)?.[1] ?? '';
     assert.ok(!/background:\s*#ffffff/i.test(bodyBlock) && !/background:\s*white\b/i.test(bodyBlock),
       `Pure white body background harms readability. body block: "${bodyBlock.trim()}"`);
@@ -679,12 +679,12 @@ describe('E — HTML / CSS audit', () => {
   });
 
   test('E03 header uses dark green brand color', () => {
-    // Header uses CSS custom property --primary: #14532d (shadcn/ui-inspired design system)
+
     assert.ok(html.includes('#14532d') || html.includes('--primary'), 'Header brand color not found');
   });
 
   test('E04 confirmed chip uses accessible green color', () => {
-    // Color updated to --status-confirmed: #15803d (shadcn/ui-inspired design system)
+
     assert.ok(
       html.includes('#15803d') || html.includes('--status-confirmed'),
       'Confirmed chip green CSS variable or color not found'
@@ -693,7 +693,7 @@ describe('E — HTML / CSS audit', () => {
   });
 
   test('E05 failed/danger color is #DC2626 (accessible red)', () => {
-    // Color is stored as #DC2626 (uppercase) via CSS variable --accent-failed
+
     assert.ok(
       html.toLowerCase().includes('#dc2626') || html.includes('--accent-failed'),
       'Failed chip red CSS variable or color not found'
@@ -701,7 +701,7 @@ describe('E — HTML / CSS audit', () => {
     assert.ok(html.includes('chip-failed'));
   });
 
-  // ── Typography ─────────────────────────────────────────────────────────────
+
   test('E06 body font-size is 16px (minimum for readability)', () => {
     assert.ok(/font-size:\s*16px/.test(html), 'body font-size 16px not found');
   });
@@ -720,7 +720,7 @@ describe('E — HTML / CSS audit', () => {
     assert.ok(html.includes('Manrope'), 'Manrope heading font not found');
   });
 
-  // ── Zoom Widget ────────────────────────────────────────────────────────────
+
   test('E10 zoom widget present with correct id', () => {
     assert.ok(html.includes('id="zoom-control"'));
   });
@@ -759,7 +759,7 @@ describe('E — HTML / CSS audit', () => {
     assert.ok(html.includes('transition'), 'CSS transition not found');
   });
 
-  // ── Calendar Structure ─────────────────────────────────────────────────────
+
   test('E18 calendar renders current and next month', () => {
     const months = ['January','February','March','April','May','June',
                     'July','August','September','October','November','December'];
@@ -778,7 +778,7 @@ describe('E — HTML / CSS audit', () => {
     assert.ok(html.includes('Schedule Month') || html.includes('Book Now'));
   });
 
-  // ── Accessibility ──────────────────────────────────────────────────────────
+
   test('E21 html element has lang="en"', () => {
     assert.ok(html.includes('lang="en"'));
   });
@@ -795,10 +795,10 @@ describe('E — HTML / CSS audit', () => {
     assert.ok(html.includes('closeModal()'));
   });
 
-  // ── Modal ──────────────────────────────────────────────────────────────────
+
   test('E25 modal shows all booking detail fields', () => {
-    // Modal was updated: m-time split into m-confirmed-time and m-target-time.
-    // m-status and m-confirmation are rendered dynamically by JS (not static HTML IDs).
+
+
     for (const id of ['m-date','m-confirmed-time','m-target-time','m-course']) {
       assert.ok(html.includes(id), `Modal field #${id} missing`);
     }
@@ -811,16 +811,16 @@ describe('E — HTML / CSS audit', () => {
     );
   });
 
-  // ── Security ───────────────────────────────────────────────────────────────
+
   test('E27 Content-Type header is text/html (no JSON confusion)', async () => {
     const r = await httpGet('http://localhost:3099/');
     assert.ok(r.headers['content-type'].includes('text/html'));
   });
 });
 
-// ═════════════════════════════════════════════════════════════════════════════
-// SECTION F: CONFIG & SCHEDULE
-// ═════════════════════════════════════════════════════════════════════════════
+
+
+
 describe('F — config / schedule', () => {
   const config = require('../src/config');
 
@@ -875,12 +875,12 @@ describe('F — config / schedule', () => {
   });
 });
 
-// ═════════════════════════════════════════════════════════════════════════════
-// SECTION G: EDGE CASES & SECURITY
-// ═════════════════════════════════════════════════════════════════════════════
+
+
+
 describe('G — edge cases & security', () => {
   test('G01 [BUG] parseInt("1abc") = 1 bypasses isNaN check in cancel endpoint', () => {
-    // Documents the known bug: "1abc" is treated as id=1, not rejected as invalid
+
     const parsed = parseInt('1abc');
     assert.equal(parsed, 1);
     assert.equal(isNaN(parsed), false,
@@ -900,7 +900,7 @@ describe('G — edge cases & security', () => {
   });
 
   test('G03 December → January month wrap: year increments correctly', () => {
-    const month = 11; // December (0-indexed)
+    const month = 11;
     const year  = 2026;
     const nextYear  = month === 11 ? year + 1 : year;
     const nextMonth = month === 11 ? 0 : month + 1;
@@ -909,7 +909,7 @@ describe('G — edge cases & security', () => {
   });
 
   test('G04 calendar grid always fills complete weeks (total cells % 7 === 0)', () => {
-    // March 2026: firstDay=0 (Sunday), daysInMonth=31
+
     const firstDay    = new Date(2026, 2, 1).getDay();
     const daysInMonth = 31;
     const total       = firstDay + daysInMonth;
@@ -918,7 +918,7 @@ describe('G — edge cases & security', () => {
   });
 
   test('G05 calendar grid: February 2027 (non-leap, starts Monday) fills correctly', () => {
-    const firstDay    = new Date(2027, 1, 1).getDay(); // Monday = 1
+    const firstDay    = new Date(2027, 1, 1).getDay();
     const daysInMonth = 28;
     const total       = firstDay + daysInMonth;
     const remaining   = total % 7 === 0 ? 0 : 7 - (total % 7);
@@ -932,8 +932,8 @@ describe('G — edge cases & security', () => {
   });
 
   test('G07 [FIXED] _shiftTime underflow now wraps correctly across midnight', () => {
-    // Fixed: _shiftTime('00:30', -60) now returns '23:30' (proper midnight wrap)
-    // Uses ((total % 1440) + 1440) % 1440 to handle negative totals correctly
+
+
     const BookingEngine = require('../src/booking');
     const engine = Object.create(BookingEngine.prototype);
     const result = engine._shiftTime('00:30', -60);
@@ -947,26 +947,26 @@ describe('G — edge cases & security', () => {
   });
 
   test('G09 [FIXED] _bookSlots now passes courseName to selectCourse() for slots i>0', () => {
-    // Previously: await this.site.selectCourse() — missing courseName argument
-    // Fixed: await this.site.selectCourse(courseName) — correct argument passed
+
+
     const code = require('fs').readFileSync(
       require('path').join(__dirname, '../src/booking.js'), 'utf8');
-    // Bug: bare selectCourse() call (no argument) in the re-navigate loop should NOT exist
+
     const bugPresent = /await this\.site\.selectCourse\(\)/.test(code);
     assert.ok(!bugPresent,
       'BUG REGRESSED: selectCourse() still called without courseName argument in _bookSlots re-navigate loop');
-    // Fix: selectCourse(courseName) should be present
+
     const fixPresent = /await this\.site\.selectCourse\(courseName\)/.test(code);
     assert.ok(fixPresent,
       'FIX MISSING: selectCourse(courseName) not found in _bookSlots re-navigate loop');
   });
 
   test('G10 [SECURITY] No CSRF protection on POST endpoints (documentation test)', async () => {
-    // Verify endpoints accept unauthenticated POST requests with no origin header.
-    // In production these should require authentication or CSRF tokens.
-    // Uses the shared test server (already running on port 3099).
+
+
+
     const r = await httpPost('http://localhost:3099/api/book-month', {});
-    // Expecting 200 — documenting that NO auth/CSRF check is enforced.
+
     assert.equal(r.status, 200,
       'book-month accepted unauthenticated request with no CSRF token — SECURITY RISK');
   });

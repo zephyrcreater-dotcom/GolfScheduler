@@ -1,13 +1,4 @@
 #!/usr/bin/env node
-/**
- * reset-failed.js
- *
- * Resets over-retried failed slots (attempts > maxRetries=3) so the booking
- * engine can retry them.  Also resets EXISTING_RESERVATION placeholder
- * "confirmed" rows so they get re-verified / re-booked.
- *
- * Affected date range: 2026-03-16 onward (current and future dates only).
- */
 
 const db     = require('./src/db');
 const config = require('./src/config');
@@ -15,10 +6,9 @@ const fs     = require('fs');
 const initSqlJs = require('sql.js');
 
 async function main() {
-  // Load the DB
+
   const sqlDb = await db.getDb();
 
-  // ── Reset 1: failed rows from 2026-03-16 onward ──────────────────────────
   sqlDb.run(`
     UPDATE bookings
     SET status = 'pending',
@@ -31,8 +21,6 @@ async function main() {
   const failedChanges = sqlDb.getRowsModified();
   console.log(`Reset ${failedChanges} failed row(s) → pending`);
 
-  // ── Reset 2: confirmed rows with EXISTING_RESERVATION placeholder ─────────
-  // These were never properly verified and should be re-booked.
   sqlDb.run(`
     UPDATE bookings
     SET status = 'pending',
@@ -47,7 +35,6 @@ async function main() {
   const existingChanges = sqlDb.getRowsModified();
   console.log(`Reset ${existingChanges} EXISTING_RESERVATION confirmed row(s) → pending`);
 
-  // ── Persist to disk ───────────────────────────────────────────────────────
   const data   = sqlDb.export();
   const buffer = Buffer.from(data);
   fs.writeFileSync(config.dbPath, buffer);

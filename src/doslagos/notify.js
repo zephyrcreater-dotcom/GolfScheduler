@@ -1,16 +1,11 @@
 const config = require('./config');
 
-/**
- * Push a notification via ntfy (https://ntfy.sh/docs/). No account needed —
- * the topic name itself is the shared secret, so anyone who knows (or
- * subscribes to) the topic can read these. Keep the topic unguessable.
- */
 async function push({ title, message, priority = 'default', clickUrl, tags }) {
   if (!config.ntfy.topic) {
     console.error('ntfy disabled: NTFY_TOPIC is missing.');
     return false;
   }
-  // Errors can include browser input values. Never publish payment/login data.
+
   const redact = value => {
     let text = String(value).replace(/\b(?:\d[ -]?){12,19}\b/g, '[redacted card number]');
     for (const secret of [config.password, config.card.number, config.card.cvv]) {
@@ -18,16 +13,14 @@ async function push({ title, message, priority = 'default', clickUrl, tags }) {
     }
     return text;
   };
-  // Use ntfy's JSON publish format rather than headers — HTTP headers must be
-  // Latin-1, which breaks on emoji in the title. JSON body handles UTF-8 fine.
+
   const body = {
     topic: config.ntfy.topic,
     title: redact(title),
     message: redact(message),
     priority: { urgent: 5, high: 4, default: 3, low: 2, min: 1 }[priority] || 3,
   };
-  // Browser launch failures can contain several pages of logs. Keep the
-  // entire JSON request below ntfy's size limit, even with Unicode/escaping.
+
   body.title = Array.from(body.title).slice(0, 120).join('');
   while (Buffer.byteLength(JSON.stringify(body), 'utf8') > 3200) {
     body.message = Array.from(body.message).slice(0, -200).join('');

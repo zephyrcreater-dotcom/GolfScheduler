@@ -38,7 +38,7 @@ async function waitForAutomaticCheck(page, timeoutMs = 20000) {
 }
 
 async function waitForLoginForm(page, checkForBlocks) {
-  // Filter before first(): a hidden duplicate must not mask the active form.
+
   const email = page.getByRole('textbox', { name: /email/i })
     .or(page.locator('input[type="email"], input[name="email"], input[name="username"]'))
     .filter({ visible: true }).first();

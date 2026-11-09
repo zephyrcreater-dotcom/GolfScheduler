@@ -1,12 +1,4 @@
-/**
- * cancel-and-rebook.js
- * One-time script: cancels all site-confirmed bookings from 2026-03-16 onwards
- * on the golf site, then purges those DB rows so the booking engine can
- * pick them up fresh (with the 4-golfer-only requirement).
- *
- * Usage:  node cancel-and-rebook.js
- * Then:   npm run init && npm run book
- */
+
 
 require('dotenv').config();
 const fs = require('fs');
@@ -20,7 +12,6 @@ const FROM_DATE = '2026-03-16';
 async function main() {
   console.log(`\n=== Batch cancel + DB purge from ${FROM_DATE} onwards ===\n`);
 
-  // 1. Collect all confirmed bookings from FROM_DATE+ with real numeric confirmation numbers
   const allUpcoming = await db.getAllUpcoming();
   const toCancel = allUpcoming.filter(b =>
     b.date >= FROM_DATE &&
@@ -38,7 +29,7 @@ async function main() {
     const site = new SiteAutomation();
     try {
       await site.init();
-      // Login
+
       await site.navigateToBooking(config.site.courses.pines.id, FROM_DATE);
       await site.login();
 
@@ -52,7 +43,6 @@ async function main() {
         console.log(`  ${d.time} ${d.course} Res#${d.resNum} — ${status}`);
       }
 
-      // Mark cancelled in DB
       for (const detail of result.details) {
         if (!detail.success) continue;
         const match = toCancel.find(b => b.confirmation_number === detail.resNum);
@@ -63,12 +53,10 @@ async function main() {
     }
   }
 
-  // 2. Purge ALL rows from FROM_DATE onwards from the DB (pending, failed, skipped, cancelled, placeholder-confirmed)
   console.log(`\nPurging all DB rows for ${FROM_DATE}+ ...`);
   const sqlDb = await db.getDb();
   sqlDb.run(`DELETE FROM bookings WHERE date >= '${FROM_DATE}'`);
 
-  // Persist the DB to disk
   const data = sqlDb.export();
   const buffer = Buffer.from(data);
   fs.writeFileSync(config.dbPath, buffer);

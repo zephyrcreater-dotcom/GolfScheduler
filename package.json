@@ -1,5 +1,5 @@
 {
-  "name": "golf-scheduler",
+  "name": "workflow-runner",
   "version": "1.0.0",
   "description": "Scheduled browser workflows with persistent state and event notifications",
   "main": "src/index.js",
@@ -14,7 +14,8 @@
     "cancel": "node src/index.js cancel",
     "sync": "node src/index.js sync",
     "generate": "node generate-static.js",
-    "doslagos": "node src/doslagos/check.js"
+    "doslagos": "node src/doslagos/check.js",
+    "check": "node src/doslagos/check.js"
   },
   "dependencies": {
     "acme-client": "^5.4.0",
