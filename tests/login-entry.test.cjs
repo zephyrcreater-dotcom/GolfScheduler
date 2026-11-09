@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const { findLoginEntry, openLogin, waitForAutomaticCheck } = require('../src/doslagos/login-entry');
+const { findLoginEntry, openLogin, waitForAutomaticCheck, waitForLoginForm } = require('../src/doslagos/login-entry');
 test('selects a visible sign-in control instead of hidden or disabled duplicates', () => {
   const previousDocument = global.document, previousStyle = global.getComputedStyle;
   const control = (text, visible = true, disabled = false, label = '') => ({ textContent: text, disabled,
@@ -35,4 +35,40 @@ test('automatic browser checks may finish normally but persistent challenges sta
   assert.equal(waits,1);
   await assert.rejects(waitForAutomaticCheck({ title:async()=> 'Just a moment...',
     waitForFunction:async()=>{throw Error('Timeout');} }), error=>error.blocked === true);
+});
+
+function loginFormPage(failures) {
+  let waits = 0, reloads = 0, filtered = false;
+  const timeout = Object.assign(new Error('form loading'), { name: 'TimeoutError' });
+  const field = {
+    or: () => field,
+    filter: options => { assert.deepEqual(options, { visible: true }); filtered = true; return field; },
+    first: () => { assert.equal(filtered, true); return field; },
+    waitFor: async options => {
+      assert.equal(options.timeout, 30000);
+      if (++waits <= failures) throw timeout;
+    },
+  };
+  return { field, getByRole: () => field, locator: () => field,
+    reload: async () => { reloads++; }, url: () => 'https://example.test/login?private=value',
+    counts: () => ({ waits, reloads }) };
+}
+test('login form filters hidden duplicates and recovers one incomplete render before credentials', async () => {
+  const page = loginFormPage(1);
+  assert.equal(await waitForLoginForm(page, async () => {}), page.field);
+  assert.deepEqual(page.counts(), { waits: 2, reloads: 1 });
+});
+test('login form retry is bounded and diagnostics omit URL query values', async () => {
+  const page = loginFormPage(2);
+  await assert.rejects(waitForLoginForm(page, async () => {}), error =>
+    /after one reload.*route: \/login/.test(error.message) && !error.message.includes('private'));
+  assert.deepEqual(page.counts(), { waits: 2, reloads: 1 });
+});
+test('login form security challenges stop before reload', async () => {
+  const page = loginFormPage(1);
+  let checks = 0;
+  await assert.rejects(waitForLoginForm(page, async () => {
+    if (++checks === 2) throw Object.assign(Error('BLOCKED'), { blocked: true });
+  }), error => error.blocked === true);
+  assert.deepEqual(page.counts(), { waits: 1, reloads: 0 });
 });

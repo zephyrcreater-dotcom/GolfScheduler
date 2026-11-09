@@ -6,7 +6,7 @@ const { browserStartupError } = require('./browser-error');
 const { verifyConfirmation } = require('./confirmation');
 const { parseHistoryCards } = require('./history');
 const { checkoutTrace } = require('./checkout-trace');
-const { openLogin, waitForAutomaticCheck } = require('./login-entry');
+const { openLogin, waitForAutomaticCheck, waitForLoginForm } = require('./login-entry');
 const { searchByCalendar, assertDisplayedDate } = require('./calendar');
 const { enterCardNumber, ensureCardReady, cardStatus } = require('./payment');
 
@@ -155,9 +155,7 @@ class DosLagosSite {
 
     await this._checkForBlocks();
 
-    const emailField = this.page.getByRole('textbox', { name: /email/i })
-      .or(this.page.locator('input[type="email"], input[name="email"], input[name="username"]')).first();
-    await emailField.waitFor({ state: 'visible', timeout: 20000 });
+    const emailField = await waitForLoginForm(this.page, () => this._checkForBlocks());
 
     await emailField.fill(this.email);
 
