@@ -41,3 +41,26 @@ test('distinguishes a missing outgoing number from a reset field and preserves t
  assert.match(trace.summary(),/AddReservation: HTTP 403/);
  assert.match(trace.failure(),/HTTP 403/);assert.doesNotMatch(trace.summary(),/private/);trace.stop();
 });
+
+test('only an isolated explicit availability rejection permits a fresh slot', async () => {
+ const page=new EventEmitter(),trace=checkoutTrace(page);
+ const request={url:()=> 'https://tr.gnsvc.com/AddReservation',method:()=> 'POST'};
+ page.emit('request',request);
+ page.emit('response',{request:()=>request,status:()=>200,json:async()=>({Success:false,StatusCode:129,Message:'This tee time is no longer available'})});
+ await trace.settle();
+ assert.deepEqual(trace.rejection(),{definitive:true,category:'availability-changed',code:129});
+ const another={url:()=> 'https://tr.gnsvc.com/AddReservation',method:()=> 'POST'};
+ page.emit('request',another);
+ assert.equal(trace.rejection(),null);
+ trace.stop();
+});
+test('payment failures, server errors, success and unreadable outcomes remain outside availability recovery', async () => {
+ for(const [status,data] of [[200,{Success:false,Message:'Payment rejected'}],[500,{Success:false,Message:'Tee time expired'}],
+   [200,{Success:true,Message:'Tee time expired'}],[200,null]]) {
+  const page=new EventEmitter(),trace=checkoutTrace(page);
+  const request={url:()=> 'https://tr.gnsvc.com/AddReservation',method:()=> 'POST'};
+  page.emit('request',request);
+  page.emit('response',{request:()=>request,status:()=>status,json:async()=>{if(!data)throw Error('Unreadable');return data;}});
+  await trace.settle();assert.equal(trace.rejection(),null);trace.stop();
+ }
+});
