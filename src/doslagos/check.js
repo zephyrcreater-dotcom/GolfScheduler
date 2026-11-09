@@ -24,13 +24,15 @@ async function checkDate(date, { file = STATE_PATH, settings = config,
     }
     await site.searchDate(date);
     const times = await site.getAvailableTimes();
-    const target = selectTeeTime(times, date, settings);
+    const rejectedSlots = Object.fromEntries(Object.entries(prior?.availabilityRejectedSlots || {})
+      .filter(([, at]) => Date.now() - Date.parse(at) < 15 * 60 * 1000));
+    const target = selectTeeTime(times.filter(slot => !rejectedSlots[slot.time]), date, settings);
     const earlyTimes = times.filter(slot => slot.time < '09:00');
     const signature = JSON.stringify(earlyTimes.map(slot => [slot.time, slot.price, slot.maxGolfers]).sort());
     if (earlyTimes.length && prior?.availabilityNotified !== signature) {
       await notifier.searchResults({date, times:earlyTimes, target, golfers:settings.golfers});
     }
-    state[date] = { ...state[date], availabilityNotified:signature };
+    state[date] = { ...state[date], availabilityNotified:signature, availabilityRejectedSlots: rejectedSlots };
     await store.save(file, state);
     if (!target) {
       state[date] = { ...state[date], status: 'none', checkedAt: new Date().toISOString() };
@@ -65,6 +67,18 @@ async function checkDate(date, { file = STATE_PATH, settings = config,
         }
       },
     });
+    if (!result.confirmation && result.purchaseRejection?.definitive === true &&
+        result.purchaseRejection.category === 'availability-changed') {
+      state[date] = { ...state[date], status: 'none',
+        attemptCount: Math.max(0, state[date].attemptCount - 1),
+        availabilityRejectedSlots: { ...rejectedSlots, [target.time]: new Date().toISOString() },
+        lastAvailabilityRejection: { ...result.purchaseRejection, time: target.time, at: new Date().toISOString() } };
+      delete state[date].error;
+      await store.save(file, state);
+      console.log(`${date} ${target.time}: explicitly rejected as unavailable; date remains eligible for another slot.`);
+      await notifier.error({ reason: `${date} at ${target.time}: the server rejected this slot as unavailable (code ${result.purchaseRejection.code}). No reservation was confirmed. The slot is skipped for 15 minutes; other eligible times remain enabled.` });
+      return { retryableAvailability: true };
+    }
     if (result.confirmation) {
       state[date].status = 'confirmed';
       state[date].confirmation = result.confirmation;
@@ -204,7 +218,16 @@ async function main(args = process.argv.slice(2), overrides = {}) {
           }
           const allowBooking = !pendingCart && overrides.allowBooking !== false && !Object.values(current).some(entry =>
             ['held','attempting','purchase-attempted','needs-review'].includes(entry.status));
-          await checkDate(target, { ...overrides, file, fillPayment, completePurchase, sharedSite, allowBooking });
+          for (let slotAttempt = 0; slotAttempt < 2; slotAttempt++) {
+            const result = await checkDate(target, { ...overrides, file, fillPayment, completePurchase, sharedSite, allowBooking });
+            if (!result?.retryableAvailability) break;
+            pendingCart = await sharedSite.hasPendingCart();
+            if (pendingCart) {
+              console.log(`${target}: rejected slot still in cart; defer until the next scheduled scan.`);
+              break;
+            }
+            if (slotAttempt === 1) break;
+          }
         }
         catch (error) {
           console.error(`${target}: ${error.message}`);

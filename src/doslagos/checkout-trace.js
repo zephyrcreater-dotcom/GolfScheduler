@@ -5,6 +5,8 @@ function checkoutTrace(page, { expectedNumber = '' } = {}) {
   const purchaseEvents = [];
   const tasks = [];
   let purchaseFailure = null;
+  const purchaseRequests = new Set();
+  const outcomes = [];
   const isPurchase = request => {
     const url = new URL(request.url());
     return url.hostname === 'tr.gnsvc.com' &&
@@ -22,6 +24,7 @@ function checkoutTrace(page, { expectedNumber = '' } = {}) {
   };
   const request = r => {
     const name = label(r); if (name) pending.set(r, name);
+    if (name && isPurchase(r)) purchaseRequests.add(r);
     if (name && isPurchase(r) && expectedNumber) {
       try {
         const data = new URLSearchParams(r.postData() || '');
@@ -39,6 +42,10 @@ function checkoutTrace(page, { expectedNumber = '' } = {}) {
       tasks.push((async () => {
         try {
           const data = await r.json();
+          outcomes.push({ request: r.request(), status: r.status(), success: data.Success,
+            availabilityChanged: typeof data.Message === 'string' &&
+              /expired|no longer available|sold out|unavailable tee/i.test(data.Message),
+            code: Number.isInteger(data.StatusCode) ? data.StatusCode : null });
           if (typeof data.Success === 'boolean') purchaseEvents.push(`Purchase result: success=${data.Success}`);
           if (data.Success === false) {
             const code = Number.isInteger(data.StatusCode) && data.StatusCode >= 0 && data.StatusCode <= 9999 ? ` (code ${data.StatusCode})` : '';
@@ -65,6 +72,14 @@ function checkoutTrace(page, { expectedNumber = '' } = {}) {
   return {
     settle: async () => { await Promise.allSettled(tasks); },
     failure: () => purchaseFailure,
+    rejection: () => {
+      const outcome = outcomes[0];
+      if (purchaseRequests.size !== 1 || outcomes.length !== 1 || !outcome ||
+          outcome.success !== false || !outcome.availabilityChanged ||
+          outcome.status < 200 || outcome.status >= 300 ||
+          new URL(outcome.request.url()).pathname !== '/AddReservation') return null;
+      return { definitive: true, category: 'availability-changed', code: outcome.code };
+    },
     summary: () => [...purchaseEvents, ...events.slice(-12), ...[...pending.values()].map(name => `${name}: still pending`)].join('; ') || 'No booking-service request observed',
     stop: () => { for (const [event, listener] of Object.entries(listeners)) page.off(event, listener); },
   };

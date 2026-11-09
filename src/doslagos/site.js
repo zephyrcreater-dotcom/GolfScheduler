@@ -830,10 +830,12 @@ class DosLagosSite {
           const reason = trace.failure() || (invalidFields.length
             ? `Purchase not confirmed; invalid fields: ${invalidFields.join(', ')}. Review reservation history.`
             : 'Purchase not confirmed after 30 seconds; no visible invalid inputs. Review reservation history.');
-          const status = fillPayment
+          const status = fillPayment && !trace.rejection()
             ? await cardStatus(this.page, paymentCard.number).catch(() => ({ unavailable: true }))
             : null;
-          throw new Error(`${reason}${status ? ` Card field: ${JSON.stringify(status)}.` : ''} Network trace: ${trace.summary()}`);
+          const failure = new Error(`${reason}${status ? ` Post-response card field: ${JSON.stringify(status)}.` : ''} Network trace: ${trace.summary()}`);
+          failure.purchaseRejection = trace.rejection();
+          throw failure;
         } finally {
           trace.stop();
         }
@@ -869,6 +871,7 @@ class DosLagosSite {
         error: err.message,
         screenshotPath,
         blocked: Boolean(err.blocked),
+        purchaseRejection: err.purchaseRejection || null,
       };
     }
   }
