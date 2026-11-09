@@ -37,6 +37,7 @@ jobs:
     env:
       HEADLESS: 'false'
       DOSLAGOS_BROWSER_CHANNEL: chrome
+      DOSLAGOS_START_AT_HISTORY: 'true'
       DOSLAGOS_HORIZON_DAYS: '14'
       DOSLAGOS_TIMEZONE: America/Los_Angeles
       DOSLAGOS_PREFERRED_TIME: '06:35'

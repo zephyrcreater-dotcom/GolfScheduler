@@ -22,6 +22,7 @@ const config = {
   confirmationSelector: process.env.DOSLAGOS_CONFIRMATION_SELECTOR || '',
   chromiumExecutablePath: process.env.DOSLAGOS_CHROMIUM_EXECUTABLE_PATH || undefined,
   browserChannel: process.env.DOSLAGOS_BROWSER_CHANNEL || undefined,
+  startAtHistory: process.env.DOSLAGOS_START_AT_HISTORY === 'true',
 
   // Days of week to check (0=Sun..6=Sat). Default: Saturday + Sunday.
   targetDays: (process.env.DOSLAGOS_TARGET_DAYS || '6,0')

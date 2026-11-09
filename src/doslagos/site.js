@@ -132,7 +132,7 @@ class DosLagosSite {
   /*
    * Login to the TeeItUp site.
    */
-  async login({ startAtHistory = false } = {}) {
+  async login({ startAtHistory = config.startAtHistory } = {}) {
     await this.page.goto(startAtHistory ? `${config.site.baseUrl}/reservation/history` : config.site.baseUrl, {
       waitUntil: 'domcontentloaded',
       timeout: 60000,
