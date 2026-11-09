@@ -44,7 +44,7 @@ async function searchByCalendar(page, date, { baseUrl, courseId, checkForBlocks,
     await selectCalendarDate(page, date);
     console.log(`${date}: selected through calendar; displayed date verified.`);
   } catch (error) {
-    // Do not switch routes around a security challenge.
+
     await checkForBlocks();
     if (!allowUrlFallback) throw error;
     console.log(`${date}: calendar unavailable; trying verified URL fallback.`);

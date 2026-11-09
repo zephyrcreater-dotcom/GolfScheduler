@@ -1,14 +1,4 @@
-/**
- * generate-static.js
- * Reads the local DB and generates docs/index.html for GitHub Pages deployment.
- *
- * Usage:
- *   node generate-static.js
- *
- * The output matches the local Express server design (src/web.js) but is a
- * static snapshot: no admin buttons, no cancel, no auto-refresh.
- * Golfer identity is anonymised (Golfer 1 / Golfer 2, no email addresses).
- */
+
 
 require('dotenv').config();
 const fs   = require('fs');
@@ -22,10 +12,8 @@ const { generateCalendarHTML, MONTH_NAMES } = require('./src/render');
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-const { execSync } = require('child_process');
-
 const TZ       = process.env.TIMEZONE || 'America/Chicago';
-const PING_URL = process.env.PING_URL || ''; // e.g. https://fwbgaggle-schedule.duckdns.org/api/ping
+const PING_URL = process.env.PING_URL || '';
 
 async function main() {
   await db.getDb();
@@ -36,7 +24,6 @@ async function main() {
   const formattedSync    = lastSyncAt ? dayjs(lastSyncAt).tz(TZ).format('YYYY-MM-DD HH:mm') : 'Never';
   const formattedUpdated = now.format('MMM D, YYYY h:mm A');
 
-  // Group by date (skip slot_index 0 to match the Express server)
   const byDate = {};
   for (const b of bookings) {
     if (b.slot_index === 0) continue;
@@ -45,7 +32,7 @@ async function main() {
   }
 
   const year  = now.year();
-  const month = now.month(); // 0-indexed
+  const month = now.month();
   const nextYear  = month === 11 ? year + 1 : year;
   const nextMonth = month === 11 ? 0 : month + 1;
 
@@ -53,7 +40,6 @@ async function main() {
   const pending   = bookings.filter(b => b.status === 'pending').length;
   const failed    = bookings.filter(b => b.status === 'failed').length;
 
-  // Determine max golfer_index from bookings to build anonymised GOLFERS array
   const maxGolferIdx = bookings.reduce((mx, b) => Math.max(mx, b.golfer_index || 0), 0);
   const golfersJson = JSON.stringify(
     Array.from({ length: maxGolferIdx + 1 }, (_, i) => ({ index: i, label: `Golfer ${i + 1}`, email: '' }))
@@ -572,25 +558,9 @@ async function main() {
 </body>
 </html>`;
 
-  fs.mkdirSync(path.join(__dirname, 'docs'), { recursive: true });
-  fs.writeFileSync(path.join(__dirname, 'docs/index.html'), html);
-  console.log(`Generated docs/index.html (${confirmed} confirmed, ${pending} pending, ${failed} failed)`);
-
-  // Auto-push to GitHub Pages
-  try {
-    execSync('git add docs/index.html', { cwd: __dirname, stdio: 'pipe' });
-    execSync('git diff --cached --quiet docs/index.html', { cwd: __dirname, stdio: 'pipe' });
-    console.log('No changes to push — schedule unchanged.');
-  } catch {
-    // diff returned non-zero = there are staged changes, commit and push
-    try {
-      execSync('git commit -m "Update schedule"', { cwd: __dirname, stdio: 'pipe' });
-      execSync('git push origin master', { cwd: __dirname, stdio: 'pipe' });
-      console.log('Pushed updated schedule to GitHub Pages.');
-    } catch (pushErr) {
-      console.warn('Warning: could not push to GitHub:', pushErr.message);
-    }
-  }
+  fs.mkdirSync(path.join(__dirname, 'public'), { recursive: true });
+  fs.writeFileSync(path.join(__dirname, 'public/index.html'), html);
+  console.log(`Generated local public/index.html (${confirmed} confirmed, ${pending} pending, ${failed} failed)`);
 
   setTimeout(() => process.exit(0), 200);
 }

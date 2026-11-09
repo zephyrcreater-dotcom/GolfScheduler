@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-/**
- * cancel-one.js
- *
- * Cancels a single specific reservation on the golf site.
- * Target: Confirmation #230352, Sunday March 15 2026, 11:20 AM, 1 golfer, Pines.
- * This booking is NOT in our DB — it must be cancelled directly on the site.
- */
 
 const SiteAutomation = require('./src/site');
 const config         = require('./src/config');

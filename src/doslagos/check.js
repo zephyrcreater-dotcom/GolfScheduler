@@ -7,8 +7,6 @@ const notify = require('./notify');
 const { recoverDate, UNCERTAIN, MAX_ATTEMPTS } = require('./recovery');
 const STATE_PATH = path.join(__dirname, '../../data/doslagos-state.json');
 
-// A lock is written BEFORE adding anything to cart. Even a crash after the
-// purchase click cannot cause another attempt for that date on the next scan.
 async function checkDate(date, { file = STATE_PATH, settings = config,
   createSite = () => new (require('./site'))(), fillPayment = false, completePurchase = false,
   store = storage, notifier = notify, sharedSite = null, allowBooking = true } = {}) {
@@ -112,9 +110,9 @@ async function main(args = process.argv.slice(2), overrides = {}) {
   const notifier = overrides.notifier || notify;
   const store = overrides.store || storage;
   if (!overrides.notifier && !config.ntfy.topic) throw new Error('Set NTFY_TOPIC in the project .env for checker notifications');
-  // PAYMENT INPUT OFF without --fill-test-payment; ON with it (project .env).
+
   const fillPayment = args.includes('--fill-test-payment');
-  // FINAL CLICK OFF without --complete-test-purchase; ON with it.
+
   const completePurchase = args.includes('--complete-test-purchase');
   const watch = args.includes('--watch');
   const dateArg = args.find(arg => arg.startsWith('--date='));

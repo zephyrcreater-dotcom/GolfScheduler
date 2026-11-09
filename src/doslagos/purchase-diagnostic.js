@@ -1,4 +1,4 @@
-// Manual only: one explicitly approved extra purchase, preserving existing bookings.
+
 function diagnosticSettings(settings, time) {
   if (!time) return settings;
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error('Diagnostic time must be HH:MM');
@@ -18,8 +18,7 @@ async function purchaseDiagnostic(date, { store, site, settings, notifier, reque
     if (state[date]?.diagnosticPurchase) throw new Error('This date already has a diagnostic attempt; refusing another');
     await site.init();
     await site.login();
-    // This manually approved extra purchase deliberately preserves the existing
-    // confirmed record. Stay in the main site's UI; do not deep-link to history.
+
     if (await site.hasPendingCart()) throw new Error('Pending cart; diagnostic stopped');
     await site.searchDate(date, { allowUrlFallback: false });
     const target = require('./selection').selectTeeTime(await site.getAvailableTimes(), date, settings);

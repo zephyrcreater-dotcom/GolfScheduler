@@ -1,5 +1,5 @@
-// Retain only allowlisted booleans, numeric codes and fixed categories.
-// Raw bodies, headers, tokens and payment values never enter logs or state.
+
+
 function checkoutTrace(page, { expectedNumber = '' } = {}) {
   const events = [];
   const purchaseEvents = [];
@@ -50,7 +50,7 @@ function checkoutTrace(page, { expectedNumber = '' } = {}) {
             purchaseFailure = `Purchase service rejected reservation: ${category}${code}`;
             purchaseEvents.push(purchaseFailure);
           }
-        } catch { /* HTML/invalid JSON is never copied into diagnostics. */ }
+        } catch {                                                           }
       })());
     }
   };

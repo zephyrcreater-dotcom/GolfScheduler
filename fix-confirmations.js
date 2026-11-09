@@ -1,11 +1,5 @@
 #!/usr/bin/env node
-/**
- * fix-confirmations.js
- * Visits the golf site's Reservations page for each confirmed booking with a
- * missing or placeholder confirmation number and updates the DB with the real
- * reservation number.  Loops through ALL golfer accounts so that G2/G3
- * reservations are also resolved.
- */
+
 const SiteAutomation = require('./src/site');
 const db = require('./src/db');
 const config = require('./src/config');
@@ -28,7 +22,6 @@ async function fixForGolfer(golferIndex, golfer, bookings) {
     return { updated: 0, notFound: 0 };
   }
 
-  // Group by date
   const byDate = {};
   for (const b of slots) {
     if (!byDate[b.date]) byDate[b.date] = [];

@@ -1,28 +1,13 @@
 'use strict';
 
-/**
- * render.js — shared HTML rendering helpers used by both the local Express
- * server (web.js) and the static-site generator (generate-static.js).
- *
- * Exported:
- *   LONG_DAY_NAMES         — full weekday name array (index = getDay())
- *   MONTH_NAMES            — full month name array (index = 0-based month)
- *   isRealConfirmed(b)     — true when a booking should appear on the calendar
- *   buildChipHTML(b, dateStr) — returns HTML string for one booking chip
- *   generateCalendarHTML(year, month, byDate, buttonLabel, isAdmin)
- */
-
-// Long day names for mobile list headings
 const LONG_DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
                      'July', 'August', 'September', 'October', 'November', 'December'];
 
-// Helper: only show confirmed bookings
 function isRealConfirmed(b) {
   return b.status === 'confirmed';
 }
 
-// Helper: build a booking chip HTML string (shared by calendar and mobile list)
 function buildChipHTML(b, dateStr) {
   const displayTime = b.actual_time || b.target_time;
   const course = b.course || 'Pines';
@@ -47,20 +32,16 @@ function generateCalendarHTML(year, month, byDate, buttonLabel = 'Schedule Month
 
   let html = `<div class="month-nav"><h2>${MONTH_NAMES[month]} ${year}</h2>${isAdmin ? `<button class="btn-schedule-month" data-year="${year}" data-month="${month}" onclick="scheduleMonth(this)">${buttonLabel}</button>` : ''}</div>`;
 
-  // Desktop calendar grid
   html += '<div class="calendar">';
 
-  // Day headers
   for (const day of dayNames) {
     html += `<div class="cal-header">${day}</div>`;
   }
 
-  // Empty cells before first day
   for (let i = 0; i < firstDay; i++) {
     html += '<div class="cal-day empty"></div>';
   }
 
-  // Days
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const isToday = dateStr === todayStr;
@@ -77,16 +58,14 @@ function generateCalendarHTML(year, month, byDate, buttonLabel = 'Schedule Month
     html += '</div>';
   }
 
-  // Fill remaining cells
   const totalCells = firstDay + daysInMonth;
   const remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
   for (let i = 0; i < remaining; i++) {
     html += '<div class="cal-day empty"></div>';
   }
 
-  html += '</div>'; // end .calendar
+  html += '</div>';
 
-  // Mobile booking list — only days with bookings
   html += '<div class="mobile-booking-list">';
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -104,7 +83,6 @@ function generateCalendarHTML(year, month, byDate, buttonLabel = 'Schedule Month
       html += buildChipHTML(b, dateStr);
     }
 
-    // Cancel buttons for admin mobile view
     const cancellableBookings = isAdmin ? dayBookings.filter(b => ['confirmed','pending','failed'].includes(b.status)) : [];
     for (const b of cancellableBookings) {
       const displayTime = b.actual_time || b.target_time;
@@ -123,9 +101,9 @@ function generateCalendarHTML(year, month, byDate, buttonLabel = 'Schedule Month
       html += `<button class="mobile-cancel-btn" onclick="openModal(JSON.parse(this.dataset.booking), this)" data-booking="${dataStr}">Cancel ${displayTime} ${course}</button>`;
     }
 
-    html += '</div>'; // end .mobile-booking-card
+    html += '</div>';
   }
-  html += '</div>'; // end .mobile-booking-list
+  html += '</div>';
 
   return html;
 }

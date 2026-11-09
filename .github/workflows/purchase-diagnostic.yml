@@ -22,7 +22,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   check:
-    # OFF until durable state is seeded, secrets set, and the local watcher stopped.
     if: inputs.approve_duplicate == true
     runs-on: ubuntu-latest
     timeout-minutes: 12

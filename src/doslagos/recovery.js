@@ -1,12 +1,11 @@
 const UNCERTAIN = new Set(['attempting', 'purchase-attempted', 'needs-review']);
 const MAX_ATTEMPTS = 2;
 
-// Called while holding the same distributed lease as the normal checker.
 async function recoverDate(date, { store, file, createSite, notifier, book }) {
   let state = await store.load(file);
   const entry = state[date];
   if (!entry || !UNCERTAIN.has(entry.status)) return;
-  // Legacy uncertain records already represent one attempted booking.
+
   const attempts = entry.attemptCount || 1;
   const site = createSite();
   try {
@@ -34,8 +33,7 @@ async function recoverDate(date, { store, file, createSite, notifier, book }) {
         reason: 'Two attempts used; check history for a possible reservation or duplicate.' });
       return;
     }
-    // Never submit a cart containing an unknown hold from another date.
-    // A pending cart is rechecked by the next scheduled run after its expiry.
+
     if (await site.hasPendingCart()) {
       if (!entry.retryWaitingNotified) {
         state[date] = { ...entry, retryWaitingNotified: true };

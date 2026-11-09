@@ -2,7 +2,6 @@ require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
 
-// Load schedule from schedule.json
 const dayMap = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
 const schedulePath = path.join(__dirname, '..', 'schedule.json');
 let rawSchedule = [];
@@ -23,27 +22,13 @@ function formatTimeLabel(start, end) {
   return `${fmt(start)}-${fmt(end)}`;
 }
 
-/**
- * Resolve the course for a schedule entry that uses "alternating".
- *
- * Parity rule (deterministic by ISO week number):
- *   even ISO week → Pines
- *   odd  ISO week → Oaks
- *
- * ISO week numbers run 1–53. Week 1 is the week containing the first Thursday
- * of the year (ISO 8601). The parity flips every week, so consecutive Sundays
- * always get different courses.
- *
- * @param {string} dateStr - Date in 'YYYY-MM-DD' format
- * @returns {'Pines'|'Oaks'}
- */
 function resolveAlternatingCourse(dateStr) {
-  // Parse date components directly to avoid any dayjs plugin dependency here.
+
   const [year, month, day] = dateStr.split('-').map(Number);
-  // Compute ISO week number using the standard algorithm.
+
   const d = new Date(Date.UTC(year, month - 1, day));
-  // Set to nearest Thursday: current date + 4 - current day number (Mon=1…Sun=7)
-  const dayNum = d.getUTCDay() || 7; // convert Sun=0 → 7
+
+  const dayNum = d.getUTCDay() || 7;
   d.setUTCDate(d.getUTCDate() + 4 - dayNum);
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   const isoWeek = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
@@ -62,18 +47,17 @@ const schedule = rawSchedule.map(entry => {
     windowEnd: entry.windowEnd,
     players: entry.players,
     slots: entry.slots,
-    // "alternating" is a sentinel — the actual course is resolved per date in scheduler.js
+
     preferredCourse: entry.course || 'Pines',
     label: `${entry.day} ${formatTimeLabel(entry.windowStart, entry.windowEnd)}`,
   };
 });
 
 const config = {
-  // Primary credentials (golfer 0)
+
   email: process.env.GOLF_EMAIL,
   password: process.env.GOLF_PASSWORD,
 
-  // All golfer credentials for round-robin scheduling
   golfers: (() => {
     const all = [
       { email: process.env.GOLF_EMAIL,  password: process.env.GOLF_PASSWORD },
@@ -83,23 +67,17 @@ const config = {
     return all.filter(g => g.email && g.password);
   })(),
 
-  // Timezone
   timezone: process.env.TIMEZONE || 'America/Chicago',
 
-  // Booking horizon
   horizonDays: parseInt(process.env.BOOKING_HORIZON_DAYS || '30', 10),
 
-  // Max retry attempts per booking
   maxRetries: 3,
 
-  // Paths
   screenshotDir: process.env.SCREENSHOT_DIR || './screenshots',
   dbPath: process.env.DB_PATH || './data/bookings.db',
 
-  // Log level
   logLevel: process.env.LOG_LEVEL || 'info',
 
-  // Scheduler fire hour (0–23, local time). Default: 6 (06:00).
   schedulerHour: (() => {
     const raw = parseInt(process.env.SCHEDULER_HOUR || '6', 10);
     if (isNaN(raw) || raw < 0 || raw > 23) {
@@ -109,7 +87,6 @@ const config = {
     return raw;
   })(),
 
-  // Site URLs and IDs (TeeItUp / Kenna Golf platform)
   site: {
     memberUrl: 'https://fort-walton-member.book.teeitup.golf',
     apiBase: 'https://phx-api-be-east-1b.kenna.io',
@@ -123,11 +100,9 @@ const config = {
     },
   },
 
-  // Recurring schedule (loaded from schedule.json)
   schedule,
 };
 
-// Validate required config
 if (!config.email || !config.password) {
   console.error('ERROR: GOLF_EMAIL and GOLF_PASSWORD environment variables are required.');
   console.error('Copy .env.example to .env and fill in your credentials.');

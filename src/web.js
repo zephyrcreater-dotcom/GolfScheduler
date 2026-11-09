@@ -18,12 +18,10 @@ const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 3009;
 
-// ── Access log store (persisted to data/access-log.json) ─────────────────────
 const ACCESS_LOG_PATH = path.join(__dirname, '../data/access-log.json');
 const ACCESS_LOG_MAX = 500;
 let ACCESS_LOG = [];
 
-// Load existing log from disk
 try {
   if (fs.existsSync(ACCESS_LOG_PATH)) {
     ACCESS_LOG = JSON.parse(fs.readFileSync(ACCESS_LOG_PATH, 'utf8'));
@@ -77,7 +75,7 @@ function isLocalIP(ip) {
   if (!ip) return false;
   if (ip === '::1' || ip === '127.0.0.1') return true;
   if (ip.startsWith('192.168.') || ip.startsWith('10.')) return true;
-  // RFC 1918: 172.16.0.0/12 covers 172.16.x.x through 172.31.x.x only
+
   const m = ip.match(/^172\.(\d+)\./);
   if (m) {
     const second = parseInt(m[1], 10);
@@ -86,7 +84,6 @@ function isLocalIP(ip) {
   return false;
 }
 
-// Log all incoming external requests with full detail
 app.use((req, res, next) => {
   const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
   if (!isLocalIP(ip)) {
@@ -113,7 +110,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── Tracking ping from GitLab Pages static site ──────────────────────────────
 app.get('/api/ping', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
@@ -136,7 +132,6 @@ app.get('/api/ping', (req, res) => {
   res.status(204).end();
 });
 
-// TASK-021: Updated to return { bookings, lastSyncAt }
 app.get('/api/bookings', async (req, res) => {
   const bookings = await db.getAllUpcoming();
   const lastSyncAt = db.getLastSyncAt();
@@ -245,7 +240,6 @@ app.post('/api/book-day', async (req, res) => {
   res.json({ success: true, message: `${numSlots} slot(s) queued for ${date} — booking started` });
 });
 
-// ── Admin access log page (localhost only) ───────────────────────────────────
 app.get('/admin', (req, res) => {
   const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
   if (!isLocalIP(ip)) return res.status(403).send('Forbidden');
@@ -360,19 +354,16 @@ app.get('/', async (req, res) => {
 
   const bookings = await db.getAllUpcoming();
 
-  // Group bookings by date — all slot_index values included (slot 0 is a valid tee time)
   const byDate = {};
   for (const b of bookings) {
     if (!byDate[b.date]) byDate[b.date] = [];
     byDate[b.date].push(b);
   }
 
-  // Get current month info
   const now = new Date();
   const year = now.getFullYear();
-  const month = now.getMonth(); // 0-indexed
+  const month = now.getMonth();
 
-  // TASK-018: Format last sync timestamp
   const lastSyncAt = db.getLastSyncAt();
   let formattedSync = 'Never';
   if (lastSyncAt) {
@@ -1417,11 +1408,8 @@ app.get('/', async (req, res) => {
 </html>`);
 });
 
-// LONG_DAY_NAMES, MONTH_NAMES, isRealConfirmed, buildChipHTML, generateCalendarHTML
-// are now imported from ./render at the top of this file.
-
 async function startServer() {
-  await db.getDb(); // Initialize DB
+  await db.getDb();
 
   const certPath = path.join(__dirname, '../data/certs/cert.pem');
   const keyPath  = path.join(__dirname, '../data/certs/key.pem');

@@ -21,7 +21,6 @@ on:
         type: boolean
         default: false
   schedule:
-    # Check every five minutes, every day.
     - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
 permissions:
   contents: read
@@ -30,7 +29,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   check:
-    # OFF until durable state is seeded, secrets set, and the local watcher stopped.
     if: vars.DOSLAGOS_CLOUD_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 12

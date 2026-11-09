@@ -1,10 +1,5 @@
 const logger = require('./logger');
 
-/**
- * Notification module — logs alerts to console and log file.
- * Can be extended with email/SMS/Slack integrations.
- */
-
 function alertPartialBooking({ date, dayLabel, bookedSlots, totalSlots, screenshotPath }) {
   const msg = [
     '========== PARTIAL BOOKING ALERT ==========',

@@ -1,4 +1,4 @@
-// Read-only diagnostic: never creates a cart or submits a purchase.
+
 
 async function diagnostic(site, { startAtHistory = false, pageAccessOnly = false } = {}) {
   let apiRequest;
@@ -9,7 +9,7 @@ async function diagnostic(site, { startAtHistory = false, pageAccessOnly = false
   });
   await site.login({ startAtHistory });
   await site.reservationHistory();
-  // Public workflow logs contain statuses only, never account reservation details.
+
   console.log(JSON.stringify({ headed: process.env.HEADLESS === 'false', historyReadSucceeded: true }));
   if (pageAccessOnly) {
     console.log(JSON.stringify({ pageAccessSucceeded: true, historyEntry: startAtHistory, purchaseAttempted: false }));
@@ -34,8 +34,7 @@ async function diagnostic(site, { startAtHistory = false, pageAccessOnly = false
   if (!apiBase || new URL(apiBase).origin !== new URL(apiRequest.url()).origin) {
     throw new Error('Cannot verify booking API origin; stopped');
   }
-  // Let Chromium supply its own transport, cookies and browser-controlled headers.
-  // Forward only application headers already sent to this same API origin.
+
   const headers = Object.fromEntries(Object.entries(await apiRequest.allHeaders())
     .filter(([name]) => !name.startsWith(':') && !name.startsWith('sec-') &&
       !['cookie', 'host', 'origin', 'referer', 'user-agent', 'accept-encoding',
@@ -45,7 +44,7 @@ async function diagnostic(site, { startAtHistory = false, pageAccessOnly = false
     const timer = setTimeout(() => controller.abort(), 30000);
     try {
       const response = await fetch(url, { method: 'GET', headers, signal: controller.signal });
-      // Do not read or log the token response body.
+
       return { tokenRequestSucceeded: response.ok, status: response.status };
     } catch {
       return { tokenRequestSucceeded: false, error: 'Browser request failed or was denied by CORS' };

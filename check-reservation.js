@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-/**
- * check-reservation.js
- *
- * Checks if reservation #230352 exists/is accessible under each golfer account
- * by navigating to its detail page and checking the content.
- */
 
 const SiteAutomation = require('./src/site');
 const config         = require('./src/config');
@@ -19,7 +13,6 @@ async function checkForGolfer(golfer, golferIndex) {
     await site.navigateToBooking(config.site.courses.pines.id, '2026-03-15');
     await site.login();
 
-    // Try to navigate to the reservation detail page
     const detailUrl = `${config.site.memberUrl}/reservation/history/230352`;
     logger.info(`Navigating to: ${detailUrl}`);
     await site.page.goto(detailUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });

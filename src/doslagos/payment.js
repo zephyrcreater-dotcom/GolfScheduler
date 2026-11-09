@@ -25,7 +25,7 @@ async function enterCardNumber(page, number) {
   const digits = cardDigits(number);
   const field = page.locator('#credit-card-number-input');
   await field.fill('');
-  // One input event avoids intermediate masked values during React rerenders.
+
   await field.fill(digits);
   await field.blur();
   await page.waitForTimeout(250);
